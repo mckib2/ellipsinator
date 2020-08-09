@@ -61,7 +61,7 @@ def fit_ellipse_halir(x, y=None):
     if x.ndim == 1:
         x = x[None, :]
         only_one = True
-    elif x.dim != 2:
+    elif x.ndim != 2:
         raise ValueError('x (and y) must have 1 or 2 dimensions: ([M,] N)')
 
     # Make sure we have enough points to fit
