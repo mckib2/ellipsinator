@@ -1,25 +1,28 @@
-'''
-WARNING: This is not yet as polished as fit_ellipse_halir!
-'''
 
 import logging
 
 import numpy as np
 
-def fit_ellipse_fitzgibon(x, y):
+from ._fit_ellipse_process_params import _fit_ellipse_process_params
+
+def fit_ellipse_fitzgibon(x, y=None):
     '''Python port of direct ellipse fitting algorithm by Fitzgibon et. al.
 
     Parameters
     ----------
-    x : array_like
-        y coordinates assumed to be on ellipse.
-    y : array_like
-        y coordinates assumed to be on ellipse.
+    x : array_like ([M,] N)
+        If y is None, x is an array of complex numbers that plot M
+        ellipses in the complex plane (i.e., plot x.real vs x.imag).
+        If y is not None, x are the x-axis coordinates assumed to
+        be on M ellipses with N points (x, y).
+    y : None or array_like ([M,] N), optional
+        If y is not None, y are the y-axis coordinates assumed to
+        be on M ellipses with N points (x, y).
 
     Returns
     -------
-    res : array_like (6,)
-        Ellipse coefficients.
+    res : array_like ([M,] 6)
+        Ellipse coefficients of the M ellipses.
 
     Notes
     -----
@@ -28,25 +31,26 @@ def fit_ellipse_fitzgibon(x, y):
     http://nicky.vanforeest.com/misc/fitEllipse/fitEllipse.html
 
     References
-    ==========
+    ----------
     .. [1] Halır, Radim, and Jan Flusser. "Numerically stable direct least
            squares fitting of ellipses." Proc. 6th International Conference in
            Central Europe on Computer Graphics and Visualization. WSCG. Vol.
            98. 1998.
     '''
 
-    # Like a pancake...
-    x = x.flatten()
-    y = y.flatten()
-
-    # Make sure we have at least 6 points (6 unknowns...)
-    if x.size < 6 and y.size < 6:
-        logging.warning('We need at least 6 sample points for a good fit!')
+    # Process the parameters
+    x, only_one = _fit_ellipse_process_params(x, y)
+    x = x.squeeze() # for now
 
     # Do the thing
     x = x[:, np.newaxis]
     y = y[:, np.newaxis]
-    D = np.hstack((x*x, x*y, y*y, x, y, np.ones_like(x))) # Design matrix
+    D = np.hstack((
+        x.real*x.real,
+        x.real*x.imag,
+        x.imag*x.imag,
+        x.real, x.imag,
+        np.ones_like(x.real))) # Design matrix
     S = np.dot(D.T, D) # Scatter matrix
     C = np.zeros([6, 6]) # Constraint matrix
     C[(0, 2), (0, 2)] = 2
@@ -54,4 +58,4 @@ def fit_ellipse_fitzgibon(x, y):
     E, V = np.linalg.eig(np.dot(np.linalg.inv(S), C)) # solve eigensystem
     n = np.argmax(np.abs(E)) # find positive eigenvalue
     a = V[:, n].squeeze() # corresponding eigenvector
-    return a
+    return a/np.linalg.norm(a)

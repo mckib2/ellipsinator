@@ -1,6 +1,66 @@
 
 import numpy as np
 
+def make_points(c, t):
+    '''Generate points along the ellipse parameterized by t.
+
+    Parameters
+    ----------
+    c : array_like (6,)
+        Ellipse coefficients.
+    t : array_like (N,)
+        Points along the ellipse.  t is in the interval [0, 2*pi).
+
+    Returns
+    -------
+    (x, y) : tuple of array_like (N,)
+        Points along the ellipse.
+
+    References
+    ----------
+    .. [1] https://en.wikipedia.org/wiki/Ellipse#General_ellipse
+    '''
+    xc, yc = get_center(c)
+    a, b = get_semiaxes(c)
+    theta = get_angle(c)
+    if a < b:
+        # TODO: is this right?
+        print('flipping semi-axes')
+        a, b = b, a
+
+    f0 = np.array([xc, yc])
+    f1 = np.array([a, 0])
+    f2 = np.array([b*np.cos(theta), b*np.sin(theta)])
+    pts = f0[:, None] + f1[:, None]*np.cos(t) + f2[:, None]*np.sin(t)
+    return pts[0, :], pts[1, :]
+
+def get_angle(c):
+    '''Find the rotation angle of the ellipse.
+
+    Parameters
+    ----------
+    c : array_like (6,)
+        Ellipse coefficients.
+
+    Returns
+    -------
+    theta : float
+        The angle from the positive horizontal axis to the ellipse's
+        major axis.
+
+    Refererence
+    -----------
+    .. [1] https://en.wikipedia.org/wiki/Ellipse#General_ellipse
+    '''
+    A, B, C, D, E, F = c[:]
+    if B == 0:
+        if A < C:
+            return 0
+        else:
+            return np.pi
+    # else...
+    return np.arctan2((C - A - np.sqrt((A - C)**2 + B**2)), B)
+
 def get_center(c):
     '''Compute center of ellipse from implicit function coefficients.
     Parameters

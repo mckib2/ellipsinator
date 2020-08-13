@@ -1,7 +1,7 @@
 
-import logging
-
 import numpy as np
+
+from ._fit_ellipse_process_params import _fit_ellipse_process_params
 
 def fit_ellipse_halir(x, y=None):
     '''Improved ellipse fitting algorithm by Halir and Flusser.
@@ -51,22 +51,8 @@ def fit_ellipse_halir(x, y=None):
     .. [2] http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.1.7559&rep=rep1&type=pdf
     '''
 
-    # Convert to complex array: (x, y) <=> (x.real, x.imag)
-    if y is not None:
-        assert x.shape == y.shape, 'x, y must have the same shape!'
-        x = x + 1j*y
-
-    # Deal with multiple ellipses
-    only_one = False
-    if x.ndim == 1:
-        x = x[None, :]
-        only_one = True
-    elif x.ndim != 2:
-        raise ValueError('x (and y) must have 1 or 2 dimensions: ([M,] N)')
-
-    # Make sure we have enough points to fit
-    if x.shape[-1] < 6:
-        logging.warning('6 or more points are required for fitting an ellipse!')
+    # Put x in the correct form
+    x, only_one = _fit_ellipse_process_params(x, y)
 
     # quadratic pt of design matrix
     D1 = np.stack((
@@ -114,7 +100,7 @@ def fit_ellipse_halir(x, y=None):
             # handle this failure case
             a1[ii, :] = 0
         else:
-            a1[ii, :] = evec[ii, :, cond > 0]
+            a1[ii, :] = evec[ii, :, cond > 0].real
 
     # ellipse coefficients
     a = np.concatenate((a1, np.einsum('fij,fj->fi', T, a1)), axis=-1)
