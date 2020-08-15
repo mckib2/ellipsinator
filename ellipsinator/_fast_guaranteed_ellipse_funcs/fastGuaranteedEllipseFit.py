@@ -1,15 +1,15 @@
+'''Main fitting loop.'''
 
 import numpy as np
 
 from .fastLevenbergMarquardtStep import fastLevenbergMarquardtStep
 
+
 def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
     '''
 
-    This function implements the ellipse fitting algorithm described in
-    Z.Szpak, W. Chojnacki and A. van den Hengel
-    "Guaranteed Ellipse Fitting with an Uncertainty Measure for Centre,
-    Axes, and Orientation"
+    This function implements the ellipse fitting algorithm described
+    in [1]_.
 
     Parameters
     ----------
@@ -43,6 +43,12 @@ def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
     -----
     Zygmunt L. Szpak (c) 2014
     Last modified 18/3/2014
+
+    References
+    ----------
+    .. [1] Z.Szpak, W. Chojnacki and A. van den Hengel
+          "Guaranteed Ellipse Fitting with an Uncertainty
+          Measure for Centre, Axes, and Orientation"
     '''
 
     eta = latentParameters
@@ -54,18 +60,20 @@ def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
     t /= np.linalg.norm(t)
 
     # various variable initialisations
-    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ##################################
     # primary loop variable
     keep_going = True
     # in some case a LevenbergMarquardtStep does not decrease the cost
     # function and so the parameters (eta) are not updated
+
     class struct:
-        pass
+        '''simply hold parameters.'''
+
     struct.eta_updated = False
     # damping parameter in LevenbergMarquadtStep
     struct.lamda = 0.01
     # loop counter (matlab arrays start at index 1, not index 0)
-    struct.k = 1
+    struct.k = 0
     # used to modify the tradeoff between gradient descent and hessian based
     # descent in LevenbergMarquadtStep
     struct.damping_multiplier = 15
@@ -81,7 +89,7 @@ def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
     struct.covList = covList
 
     # various parameters that determine stopping criteria
-    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    #####################################################
     # maximum loop iterations
     maxIter = 200
     # step-size tolerance
@@ -99,18 +107,18 @@ def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
     struct.tolDet = 1e-5
 
     Fprim = np.array([
-        [0, 0,  2],
+        [0, 0, 2],
         [0, -1, 0],
-        [2, 0,  0],
+        [2, 0, 0],
     ])
     F = np.concatenate([
         np.concatenate([Fprim, np.zeros((3, 3))], axis=1),
         np.concatenate([np.zeros((3, 3)), np.zeros((3, 3))], axis=1),
     ], axis=0)
-    I = np.eye(6)
+    Identity = np.eye(6)
 
     # various initial memory allocations
-    #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    ####################################
     # allocate space for cost of each iteration
     struct.cost = np.zeros(maxIter)
     # allocate space for the latent parameters of each iteration
@@ -120,15 +128,15 @@ def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
     # allocate space for the parameter direction of each iteration
     struct.delta = np.zeros((5, maxIter))
     # make parameter vector a unit norm vector for numerical stability
-    #t = t / norm(t);
+    # t = t / norm(t);
     # store the parameters associated with the first iteration
-    struct.t[:, struct.k-1] = t.squeeze()
-    struct.eta[:, struct.k-1] = eta
+    struct.t[:, struct.k] = t.squeeze()
+    struct.eta[:, struct.k] = eta
     # start with some random search direction (here we choose all 1's)
     # we can initialise with anything we want, so long as the norm of the
     # vector is not smaller than tolDeta. The initial search direction
     # is not used in any way in the algorithm.
-    struct.delta[:, struct.k-1] = np.ones(5)
+    struct.delta[:, struct.k] = np.ones(5)
     # main estimation loop
     while keep_going and struct.k < maxIter:
 
@@ -137,11 +145,16 @@ def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
         # allocate space for the jacobian matrix based on AML component
         struct.jacobian_matrix = np.zeros((struct.numberOfPoints, 5))
         # grab the current latent parameter estimates
-        eta = struct.eta[:, struct.k-1]
+        eta = struct.eta[:, struct.k]
         # convert latent variables into length-6 vector (called t) representing
         # the equation of an ellipse
         t = np.array([
-            [1, 2*eta[0], eta[0]**2 + np.abs(eta[1])**2, eta[2], eta[3], eta[4]],
+            [1,
+             2*eta[0],
+             eta[0]**2 + np.abs(eta[1])**2,
+             eta[2],
+             eta[3],
+             eta[4]],
         ]).T
 
         # jacobian matrix of the transformation from eta to theta parameters
@@ -182,8 +195,8 @@ def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
 
             B = dux_i @ covX_i @ dux_i.T
 
-            tBt = (t.T @ B @ t).squeeze() # scalar
-            tAt = (t.T @ A @ t).squeeze() # scalar
+            tBt = (t.T @ B @ t).squeeze()  # scalar
+            tAt = (t.T @ A @ t).squeeze()  # scalar
 
             # AML cost for i'th data point
             struct.r[ii] = np.sqrt(np.abs(tAt/tBt))
@@ -200,10 +213,10 @@ def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
             struct.jacobian_matrix[ii, :] = grad @ jacob_latentParameters
 
         # approximate Hessian matrix
-        struct.H =  struct.jacobian_matrix.T @ struct.jacobian_matrix
+        struct.H = struct.jacobian_matrix.T @ struct.jacobian_matrix
 
         # sum of squares cost for the current iteration
-        struct.cost[struct.k-1] = struct.r.T @ struct.r
+        struct.cost[struct.k] = struct.r.T @ struct.r
 
         struct.jacob_latentParameters = jacob_latentParameters
 
@@ -212,18 +225,22 @@ def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
 
         # Preparations for various stopping criteria tests
 
-
         # convert latent variables into length-6 vector (called t) representing
         # the equation of an ellipse
-        eta = struct.eta[:, struct.k]
+        eta = struct.eta[:, struct.k+1]
         t = np.array([
-            [1, 2*eta[0], eta[0]**2 + np.abs(eta[1])**2, eta[2], eta[3], eta[4]],
+            [1,
+             2*eta[0],
+             eta[0]**2 + np.abs(eta[1])**2,
+             eta[2],
+             eta[3],
+             eta[4]],
         ]).T
         t /= np.linalg.norm(t)
 
-        # First criterion checks to see if discriminant approaches zero by using
-        # a barrier
-        tIt = (t.T @ I @ t).squeeze()
+        # First criterion checks to see if discriminant approaches zero
+        # by using a barrier
+        tIt = (t.T @ Identity @ t).squeeze()
         tFt = (t.T @ F @ t).squeeze()
         barrier = tIt/tFt
 
@@ -237,21 +254,29 @@ def fastGuaranteedEllipseFit(latentParameters, dataPts, covList):
         DeterminantConic = np.linalg.det(M)
 
         # Check for various stopping criteria to end the main loop
-        if np.min([np.linalg.norm(struct.eta[:, struct.k] - struct.eta[:, struct.k-1]), np.linalg.norm(struct.eta[:, struct.k] + struct.eta[:, struct.k-1])]) < struct.tolEta and struct.eta_updated:
-            keep_going = False
-        elif np.abs(struct.cost[struct.k-1] - struct.cost[struct.k]) < struct.tolCost and struct.eta_updated:
-            keep_going = False
-        elif np.linalg.norm(struct.delta[:, struct.k]) < struct.tolDelta and struct.eta_updated:
-            keep_going = False
+        if struct.eta_updated:
+            etak = struct.eta[:, struct.k]
+            etak1 = struct.eta[:, struct.k+1]
+            costk = struct.cost[struct.k]
+            costk1 = struct.cost[struct.k+1]
+            if np.minimum(
+                    np.linalg.norm(etak1 - etak),
+                    np.linalg.norm(etak1 + etak)) < struct.tolEta:
+                keep_going = False
+            elif np.abs(costk - costk1) < struct.tolCost:
+                keep_going = False
+            elif np.linalg.norm(struct.delta[:, struct.k+1]) < struct.tolDelta:
+                keep_going = False
         elif np.linalg.norm(grad) < struct.tolGrad:
             keep_going = False
-        elif np.log(barrier) > struct.tolBar or np.abs(DeterminantConic) < struct.tolDet:
+        elif (np.log(barrier) > struct.tolBar or
+              np.abs(DeterminantConic) < struct.tolDet):
             keep_going = False
 
         struct.k += 1
 
     iterations = struct.k
-    theta = struct.t[:, struct.k-1]
+    theta = struct.t[:, struct.k]
     theta /= np.linalg.norm(theta)
 
     return(theta, iterations)

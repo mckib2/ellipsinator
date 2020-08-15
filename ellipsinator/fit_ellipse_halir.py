@@ -1,7 +1,9 @@
+'''Python port of ellipse fitting algorithm due to Halir and Flusser.'''
 
 import numpy as np
 
 from ._fit_ellipse_process_params import _fit_ellipse_process_params
+
 
 def fit_ellipse_halir(x, y=None):
     '''Improved ellipse fitting algorithm by Halir and Flusser.
@@ -48,22 +50,19 @@ def fit_ellipse_halir(x, y=None):
     .. [1] A. W. Fitzgibbon, M. Pilu, R. B. Fisher "Direct Least
            Squares Fitting of Ellipses" IEEE Trans. PAMI, Vol. 21,
            pages 476-480 (1999)
-    .. [2] http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.1.7559&rep=rep1&type=pdf
+    .. [2] http://citeseerx.ist.psu.edu/viewdoc/
+           download?doi=10.1.1.1.7559&rep=rep1&type=pdf
     '''
 
     # Put x in the correct form
-    x, only_one = _fit_ellipse_process_params(x, y)
+    x, y, only_one = _fit_ellipse_process_params(x, y)
 
     # quadratic pt of design matrix
     D1 = np.stack((
-        x.real**2,
-        x.real*x.imag,
-        x.imag**2), axis=1).transpose((0, 2, 1))
+        x**2, x*y, y**2), axis=1).transpose((0, 2, 1))
     # lin part design matrix
     D2 = np.stack((
-        x.real,
-        x.imag,
-        np.ones(x.shape)), axis=1).transpose((0, 2, 1))
+        x, y, np.ones(x.shape)), axis=1).transpose((0, 2, 1))
 
     # quadratic part of the scatter matrix
     S1 = np.einsum('fji,fjk->fik', D1, D1)
@@ -104,11 +103,12 @@ def fit_ellipse_halir(x, y=None):
 
     # ellipse coefficients
     a = np.concatenate((a1, np.einsum('fij,fj->fi', T, a1)), axis=-1)
-    a /= np.linalg.norm(a) # normalize? not in MATLAB version
+    a /= np.linalg.norm(a)  # normalize? not in MATLAB version
 
     if only_one:
         return a[0, :]
     return a
+
 
 if __name__ == '__main__':
     pass

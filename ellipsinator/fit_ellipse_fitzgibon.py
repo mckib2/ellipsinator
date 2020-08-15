@@ -1,9 +1,9 @@
-
-import logging
+'''Ellipse fitting algorithm due to Fitzgibon et. al.'''
 
 import numpy as np
 
 from ._fit_ellipse_process_params import _fit_ellipse_process_params
+
 
 def fit_ellipse_fitzgibon(x, y=None):
     '''Python port of direct ellipse fitting algorithm by Fitzgibon et. al.
@@ -39,23 +39,20 @@ def fit_ellipse_fitzgibon(x, y=None):
     '''
 
     # Process the parameters
-    x, only_one = _fit_ellipse_process_params(x, y)
-    x = x.squeeze() # for now
+    x, y, only_one = _fit_ellipse_process_params(x, y)
+    assert only_one, 'This method only works with a single ellipse!'
+    x, y = x.squeeze(), y.squeeze()  # TODO: make M-ellipsable
 
     # Do the thing
-    x = x[:, np.newaxis]
-    y = y[:, np.newaxis]
+    x = x[:, None]
+    y = y[:, None]
     D = np.hstack((
-        x.real*x.real,
-        x.real*x.imag,
-        x.imag*x.imag,
-        x.real, x.imag,
-        np.ones_like(x.real))) # Design matrix
-    S = np.dot(D.T, D) # Scatter matrix
-    C = np.zeros([6, 6]) # Constraint matrix
+        x*x, x*y, y*y, x, y, np.ones_like(x.real)))  # Design matrix
+    S = D.T @ D  # Scatter matrix
+    C = np.zeros([6, 6])  # Constraint matrix
     C[(0, 2), (0, 2)] = 2
     C[1, 1] = -1
-    E, V = np.linalg.eig(np.dot(np.linalg.inv(S), C)) # solve eigensystem
-    n = np.argmax(np.abs(E)) # find positive eigenvalue
-    a = V[:, n].squeeze() # corresponding eigenvector
+    E, V = np.linalg.eig(np.dot(np.linalg.inv(S), C))  # solve eigensystem
+    n = np.argmax(np.abs(E))  # find positive eigenvalue
+    a = V[:, n].squeeze()  # corresponding eigenvector
     return a/np.linalg.norm(a)

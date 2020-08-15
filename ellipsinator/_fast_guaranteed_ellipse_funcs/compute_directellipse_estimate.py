@@ -1,17 +1,17 @@
 
 import numpy as np
 
-#from .direct_ellipse_fit import direct_ellipse_fit
+# from .direct_ellipse_fit import direct_ellipse_fit
 from ellipsinator import fit_ellipse_halir
 from .normalize_data_isotropically import normalize_data_isotropically
 
 
-def compute_directellipse_estimates(dataPts):
+def compute_directellipse_estimates(x, y):
     '''
     Parameters
     ----------
-    dataPts
-        a Nx2 matrix where N is the number of data points
+    x, y : array_like (N,)
+        (N,) matrices where N is the number of data points.
 
     Returns
     -------
@@ -25,20 +25,8 @@ def compute_directellipse_estimates(dataPts):
 
     Notes
     -----
-
     This function is a wrapper for the numerically stable direct ellipse
-    fit due to
-
-    R. Halif and J. Flusser
-    "Numerically stable direct least squares fitting of ellipses"
-    Proc. 6th International Conference in Central Europe on Computer
-    Graphics and Visualization. WSCG '98 Czech Republic,125--132, feb, 1998
-
-    which is a modificaiton of
-
-    A. W. Fitzgibbon, M. Pilu, R. B. Fisher
-    "Direct Least Squares Fitting of Ellipses"
-    IEEE Trans. PAMI, Vol. 21, pages 476-480 (1999)
+    fit due to [1]_ which is a modificaiton of [2]_.
 
     It first shifts all the data points to a new
     coordinate system so that the origin of the coordinate system is at the
@@ -49,39 +37,53 @@ def compute_directellipse_estimates(dataPts):
 
     Zygmunt L. Szpak (c) 2012
     Last modified 27/3/2014
+
+    References
+    ---------
+    .. [1] R. Halif and J. Flusser "Numerically stable direct least squares
+           fitting of ellipses" Proc. 6th International Conference in Central
+           Europe on Computer Graphics and Visualization. WSCG '98 Czech
+           Republic,125--132, feb, 1998
+    .. [2] A. W. Fitzgibbon, M. Pilu, R. B. Fisher "Direct Least Squares
+           Fitting of Ellipses" IEEE Trans. PAMI, Vol. 21, pages 476-480 (1999)
     '''
 
-    nPts = dataPts.shape[0]
+    assert x.shape == y.shape, 'x, y must have the same shape!'
 
     # scale and translate data points so that they lie inside a unit box
-    normalizedPoints, T = normalize_data_isotropically(dataPts)
-    normalizedPoints = np.concatenate((normalizedPoints, np.ones((nPts, 1))), axis=1)
+    xn, yn, T = normalize_data_isotropically(x, y)
 
-    #theta = direct_ellipse_fit(normalizedPoints.T)
-    theta = fit_ellipse_halir(normalizedPoints[:, 0], normalizedPoints[:, 1]) # equivalent
-    theta /= np.linalg.norm(theta)
+    # theta = direct_ellipse_fit(normalizedPoints.T)
+    # or equivalently:
+    theta = fit_ellipse_halir(xn, yn)
+    theta /= np.linalg.norm(theta, axis=-1)
 
-    a = theta[0]
-    b = theta[1]
-    c = theta[2]
-    d = theta[3]
-    e = theta[4]
-    f = theta[5]
-    C = np.array([
-        [a, b/2, d/2],
-        [b/2, c, e/2],
-        [d/2, e/2, f],
-    ])
+    a = theta[:, 0]
+    b = theta[:, 1]
+    c = theta[:, 2]
+    d = theta[:, 3]
+    e = theta[:, 4]
+    f = theta[:, 5]
+    C = np.concatenate((
+        np.concatenate((a[:, None], b[:, None]/2, d[:, None]/2), axis=1)[:, None, :],
+        np.concatenate((b[:, None]/2, c[:, None], e[:, None]/2), axis=1)[:, None, :],
+        np.concatenate((d[:, None]/2, e[:, None]/2, f[:, None]), axis=1)[:, None, :],
+    ), axis=1)
 
     # denormalise C
-    C = T.T @ C @ T
-    aa = C[0, 0]
-    bb = C[0, 1]*2
-    dd = C[0, 2]*2
-    cc = C[1, 1]
-    ee = C[1, 2]*2
-    ff = C[2, 2]
-    theta = np.array([aa, bb, cc, dd, ee, ff])
-    theta /= np.linalg.norm(theta)
-
-    return theta
+    C = np.einsum('fji,fjk,fkl->fjl', T, C, T)
+    # C = T.T @ C @ T
+    aa = C[:, 0, 0]
+    bb = C[:, 0, 1]*2
+    dd = C[:, 0, 2]*2
+    cc = C[:, 1, 1]
+    ee = C[:, 1, 2]*2
+    ff = C[:, 2, 2]
+    theta = np.concatenate((
+        aa[:, None],
+        bb[:, None],
+        cc[:, None],
+        dd[:, None],
+        ee[:, None],
+        ff[:, None]), axis=-1)
+    return theta/np.linalg.norm(theta, axis=-1)

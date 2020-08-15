@@ -1,7 +1,9 @@
+'''Normalize coordinates so that they lie inside a unit box.'''
 
 import numpy as np
 
-def normalize_data_isotropically(dataPts):
+
+def normalize_data_isotropically(x, y):
     '''Normalzie data isotropically.
 
     This procedure takes as input a matrix of two-dimensional
@@ -37,26 +39,27 @@ def normalize_data_isotropically(dataPts):
             28: 19-27
     '''
 
-    nPoints = dataPts.shape[0]
+    assert x.shape == y.shape, 'x, y must be the same shape!'
+    nEllipses, nPoints = x.shape[:]
 
     # homogenous representation of data points resulting in a 3 x nPoints
     # matrix, where the first row contains all the x-coordinates, the second
     # row contains all the y-coordinates and the last row contains the
     # homogenous coordinate 1.
-    points = np.concatenate((dataPts, np.ones((nPoints, 1))), axis=1).T
+    points = np.concatenate((
+        x[None, ...], y[None, ...], np.ones((1, nEllipses, nPoints))), axis=0)
 
-    meanX = np.mean(points[0, :])
-    meanY = np.mean(points[1, :])
+    meanX = np.mean(points[0, ...], axis=-1)
+    meanY = np.mean(points[1, ...], axis=-1)
 
     # isotropic scaling factor
-    s = np.sqrt((1/(2*nPoints))*np.sum((points[0, :] - meanX)**2 + (points[1, :] - meanY)**2))
-    T = np.array([
-        [1/s,    0,     -meanX/s],
-        [0,      1/s,   -meanY/s],
-        [0,      0,     1],
-    ])
+    s = np.sqrt((1/(2*nPoints))*np.sum(
+        (points[0, ...] - meanX)**2 + (points[1, ...] - meanY)**2, axis=-1))
+    T = np.concatenate((
+        np.concatenate((1/s[:, None], np.zeros((nEllipses, 1)), (-meanX/s)[:, None]), axis=1)[:, None, :],
+        np.concatenate((np.zeros((nEllipses, 1)), 1/s[:, None], (-meanY/s)[:, None]), axis=1)[:, None, :],
+        np.concatenate((np.zeros((nEllipses, 1)), np.zeros((nEllipses, 1)), np.ones((nEllipses, 1))), axis=1)[:, None, :],
+    ), axis=1)
 
-    normalizedPts = T @ points
-    # remove homogenous coordinate
-    normalizedPts = normalizedPts.T[:, :-1]
-    return(normalizedPts, T)
+    normalizedPts = np.einsum('fij,jfk->fik', T, points)
+    return(normalizedPts[:, 0, :], normalizedPts[:, 1, :], T)

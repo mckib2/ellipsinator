@@ -2,15 +2,20 @@
 
 References
 ----------
-.. [1] https://github.com/zygmuntszpak/guaranteed-ellipse-fitting-with-a-confidence-region-and-an-uncertainty-measure
+.. [1] https://github.com/zygmuntszpak/guaranteed-ellipse-fitting-
+       with-a-confidence-region-and-an-uncertainty-measure
 '''
 
 import numpy as np
 
 from ._fit_ellipse_process_params import _fit_ellipse_process_params
-from ._fast_guaranteed_ellipse_funcs.compute_directellipse_estimate import compute_directellipse_estimates
-from ._fast_guaranteed_ellipse_funcs.normalize_data_isotropically import normalize_data_isotropically
-from ._fast_guaranteed_ellipse_funcs.fastGuaranteedEllipseFit import fastGuaranteedEllipseFit
+from ._fast_guaranteed_ellipse_funcs.compute_directellipse_estimate import (
+    compute_directellipse_estimates)
+from ._fast_guaranteed_ellipse_funcs.normalize_data_isotropically import (
+    normalize_data_isotropically)
+from ._fast_guaranteed_ellipse_funcs.fastGuaranteedEllipseFit import (
+    fastGuaranteedEllipseFit)
+
 
 def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     '''Guaranteed Ellipse Fitting with a Confidence Region and an
@@ -75,44 +80,46 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     ----------
     .. [2] Z. L. Szpak, W. Chojnacki, and A. van den Hengel. Guaranteed ellipse
            fitting with a confidence region and an uncertainty measure for
-           centre, axes, and orientation. J. Math. Imaging Vision, 52(2):173-199,
-           2015.
-    .. [3] Z.Szpak, W. Chojnacki and A. van den Hengel, "A comparison of ellipse
-           fitting methods and implications for multiple view geometry", Digital
-           Image Computing Techniques and Applications, Dec 2012, pp 1--8
+           centre, axes, and orientation. J. Math. Imaging Vision,
+           52(2):173-199, 2015.
+    .. [3] Z. Szpak, W. Chojnacki and A. van den Hengel, "A comparison of
+           ellipse fitting methods and implications for multiple view
+           geometry", Digital Image Computing Techniques and Applications,
+           Dec 2012, pp 1--8
     '''
 
-    x, only_one = _fit_ellipse_process_params(x, y)
+    x, y, only_one = _fit_ellipse_process_params(x, y)
     assert only_one, 'This function only fits a single ellipse!'
-
-    # We expect dataPts to have shape (N, 2):
-    dataPts = np.concatenate((x.real, x.imag), axis=0).T
-    nPts = dataPts.shape[0]
+    nPts = x.shape[1]
 
     # Check to see if the user passed in their own list of covariance matrices
     if covList is None:
         # Generate a list of diagonal covariance matrices
-        #covList = mat2cell(repmat(np.eye(2), 1, nPts), 2, 2*(np.ones((1, nPts))))
         class UnformDict:
+            '''Return val for every requested key.'''
             def __init__(self, val):
                 self.val = val
+
             def __getitem__(self, _key):
                 return self.val
         covList = UnformDict(np.eye(2))
 
     # estimate an initial ellipse using the direct ellipse fit method
-    initialEllipseParameters = compute_directellipse_estimates(dataPts)
+    initialEllipseParameters = compute_directellipse_estimates(x, y)
 
     # scale and translate data points so that they lie inside a unit box
-    normalizedPoints, T = normalize_data_isotropically(dataPts)
+    xn, yn, T = normalize_data_isotropically(x, y)
 
     # transfer initialParameters to normalized coordinate system
     # the formula appears in the paper [3]_
-    initialEllipseParameters /= np.linalg.norm(initialEllipseParameters)
+    initialEllipseParameters /= np.linalg.norm(
+        initialEllipseParameters, axis=-1)
     E = np.diag([1, 1/2, 1, 1/2, 1/2, 1])
     # permutation matrix for interchanging 3rd and 4th
     # entries of a length-6 vector
-    P34 = np.kron(np.diag([0, 1, 0]), np.array([[0, 1], [1, 0]])) + np.kron(np.diag([1, 0, 1]), np.eye(2))
+    P34 = np.kron(
+        np.diag([0, 1, 0]),
+        np.array([[0, 1], [1, 0]])) + np.kron(np.diag([1, 0, 1]), np.eye(2))
     # 9 x 6 duplication matrix
     D3 = np.array([
         [1, 0, 0, 0, 0, 0],
@@ -127,10 +134,21 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     ])
 
     P34D3pinv = P34 @ np.linalg.pinv(D3)
-    kTT = np.kron(T, T)
+    # kTT = np.kron(T, T)
+    kTT = np.einsum('fik,fjl->fijkl', T, T)
+    kTT.shape = (T.shape[0], T.shape[1]**2, T.shape[2]**2)
     D3P34E = D3 @ P34 @ E
-    initialEllipseParametersNormalizedSpace = np.linalg.solve(E, P34D3pinv @ np.linalg.inv(kTT).T @ D3P34E @ initialEllipseParameters)
-    initialEllipseParametersNormalizedSpace /= np.linalg.norm(initialEllipseParametersNormalizedSpace)
+    # P34D3pinv @ np.linalg.inv(kTT).T @ D3P34E @ initialEllipseParameters
+    b = np.einsum('ij,fkj,kl,fl->fi', P34D3pinv, np.linalg.inv(kTT), D3P34E, initialEllipseParameters)
+    initialEllipseParametersNormalizedSpace = np.linalg.solve(E, b.T)
+    initialEllipseParametersNormalizedSpace /= np.linalg.norm(
+        initialEllipseParametersNormalizedSpace)
+    initialEllipseParametersNormalizedSpace = initialEllipseParametersNormalizedSpace.squeeze()
+
+    # TODO: remove
+    normalizedPoints = np.concatenate((xn, yn), axis=0).T
+    T = T.squeeze()
+    kTT = kTT.squeeze()
 
     # Becase the data points are now in a new normalised coordinate system,
     # the data covariance matrices also need to be tranformed into the
@@ -139,7 +157,7 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     # covariance matrices in a 3x3 matrix (by padding the 2x2 covariance
     # matrices by zeros) and by  multiply the covariance matrices by the
     # matrix T from the left and T' from the right.
-    normalised_CovList = {} #cell(1, nPts)
+    normalised_CovList = {}
     for iPts in range(nPts):
         covX_i = np.zeros((3, 3))
         covX_i[0:2, 0:2] = covList[iPts]
@@ -173,16 +191,20 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
 
     latentParameters = np.array([p, q, r, s, t])
 
-    ellipseParametersFinal, iterations = fastGuaranteedEllipseFit(latentParameters, normalizedPoints.T, normalised_CovList)
+    ellipseParametersFinal, iterations = fastGuaranteedEllipseFit(
+        latentParameters, normalizedPoints.T, normalised_CovList)
 
     ellipseParametersFinal /= np.linalg.norm(ellipseParametersFinal)
 
     # convert final ellipse parameters back to the original coordinate system
-    estimatedParameters = np.linalg.solve(E, P34D3pinv @ kTT.T @ D3P34E @ ellipseParametersFinal)
+    estimatedParameters = np.linalg.solve(
+        E,
+        P34D3pinv @ kTT.T @ D3P34E @ ellipseParametersFinal)
     estimatedParameters /= np.linalg.norm(estimatedParameters)
     estimatedParameters *= np.sign(estimatedParameters[-1])
 
     return(estimatedParameters, iterations)
+
 
 if __name__ == '__main__':
     pass
