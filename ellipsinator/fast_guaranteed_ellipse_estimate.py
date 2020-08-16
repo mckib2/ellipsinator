@@ -69,9 +69,12 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     Implements the algorithm described in [2]_.
 
     Much of the Python port was a mechanical process, but some obvious
-    optimizations were taken opportunistically.  Also note that this
-    function differs from some of the other fitting methods in this
-    package in that it only fits a single ellipse at a time.
+    optimizations were taken opportunistically.  Many loops were removed
+    and replaced with vectorized implementations.
+
+    Also note that this function differs from some of the other fitting
+    methods in this package in that it only fits a single ellipse at a
+    time. Work is underway to modify it to work with multiple ellipses.
 
     Original Author of MATLAB: Zygmunt L. Szpak (zygmunt.szpak@gmail.com)
     Date: March 2014
@@ -139,16 +142,12 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     kTT.shape = (T.shape[0], T.shape[1]**2, T.shape[2]**2)
     D3P34E = D3 @ P34 @ E
     # P34D3pinv @ np.linalg.inv(kTT).T @ D3P34E @ initialEllipseParameters
-    b = np.einsum('ij,fkj,kl,fl->fi', P34D3pinv, np.linalg.inv(kTT), D3P34E, initialEllipseParameters)
-    initialEllipseParametersNormalizedSpace = np.linalg.solve(E, b.T)
+    b = np.einsum(
+        'ij,fkj,kl,fl->fi',
+        P34D3pinv, np.linalg.inv(kTT), D3P34E, initialEllipseParameters)
+    initialEllipseParametersNormalizedSpace = np.linalg.solve(E, b.T).T
     initialEllipseParametersNormalizedSpace /= np.linalg.norm(
-        initialEllipseParametersNormalizedSpace)
-    initialEllipseParametersNormalizedSpace = initialEllipseParametersNormalizedSpace.squeeze()
-
-    # TODO: remove
-    normalizedPoints = np.concatenate((xn, yn), axis=0).T
-    T = T.squeeze()
-    kTT = kTT.squeeze()
+        initialEllipseParametersNormalizedSpace, axis=-1)
 
     # Becase the data points are now in a new normalised coordinate system,
     # the data covariance matrices also need to be tranformed into the
@@ -157,14 +156,16 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     # covariance matrices in a 3x3 matrix (by padding the 2x2 covariance
     # matrices by zeros) and by  multiply the covariance matrices by the
     # matrix T from the left and T' from the right.
-    normalised_CovList = {}
+
+    normalised_CovList = np.empty((nPts, x.shape[0], 2, 2))
     for iPts in range(nPts):
         covX_i = np.zeros((3, 3))
         covX_i[0:2, 0:2] = covList[iPts]
-        covX_i = T @ covX_i @ T.T
+        # covX_i = T @ covX_i @ T.T
+        covX_i = np.einsum('fij,jk,flk->fil', T, covX_i, T)
         # the upper-left 2x2 matrix now represents the covariance of the
         # coordinates of the data point in the normalised coordinate system
-        normalised_CovList[iPts] = covX_i[0:2, 0:2]
+        normalised_CovList[iPts] = covX_i[:, 0:2, 0:2]
 
     # To guarantee an ellipse we utilise a special parameterisation which
     # by definition excludes the possiblity of a hyperbola. In theory
@@ -178,30 +179,32 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     # NB, it is assumed that the initialParameters that were passed into the
     # function do not represent a hyperbola or parabola.
     para = initialEllipseParametersNormalizedSpace
-    # p = para(2)/(2*para(1))
-    # q = 1 / sqrt(para(3)/para(1) - (para(2)/(2*para(1)))^2)
-    # r = para(4) / para(1)
-    # s = para(5) / para(1)
-    # t = para(6) / para(1)
-    p = para[1]/(2*para[0])
-    q = np.sqrt(para[2]/para[0] - (para[1]/(2*para[0]))**2)
-    r = para[3] / para[0]
-    s = para[4] / para[0]
-    t = para[5] / para[0]
+    p = para[:, 1]/(2*para[:, 0])
+    q = np.sqrt(para[:, 2]/para[:, 0] - (para[:, 1]/(2*para[:, 0]))**2)
+    r = para[:, 3] / para[:, 0]
+    s = para[:, 4] / para[:, 0]
+    t = para[:, 5] / para[:, 0]
 
-    latentParameters = np.array([p, q, r, s, t])
+    latentParameters = np.concatenate((
+        p[:, None],
+        q[:, None],
+        r[:, None],
+        s[:, None],
+        t[:, None],
+    ), axis=-1)
 
     ellipseParametersFinal, iterations = fastGuaranteedEllipseFit(
-        latentParameters, normalizedPoints.T, normalised_CovList)
-
+        latentParameters, xn, yn, normalised_CovList)
     ellipseParametersFinal /= np.linalg.norm(ellipseParametersFinal)
 
     # convert final ellipse parameters back to the original coordinate system
-    estimatedParameters = np.linalg.solve(
-        E,
-        P34D3pinv @ kTT.T @ D3P34E @ ellipseParametersFinal)
-    estimatedParameters /= np.linalg.norm(estimatedParameters)
-    estimatedParameters *= np.sign(estimatedParameters[-1])
+    # P34D3pinv @ kTT.T @ D3P34E @ ellipseParametersFinal
+    b = np.einsum(
+        'ij,fkj,kl,fl->fi',
+        P34D3pinv, kTT, D3P34E, ellipseParametersFinal)
+    estimatedParameters = np.linalg.solve(E, b.T).T
+    estimatedParameters /= np.linalg.norm(estimatedParameters, axis=-1)
+    estimatedParameters *= np.sign(estimatedParameters[:, -1])
 
     return(estimatedParameters, iterations)
 

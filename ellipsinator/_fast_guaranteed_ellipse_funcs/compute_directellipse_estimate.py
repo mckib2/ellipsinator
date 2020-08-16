@@ -71,7 +71,7 @@ def compute_directellipse_estimates(x, y):
     ), axis=1)
 
     # denormalise C
-    C = np.einsum('fji,fjk,fkl->fjl', T, C, T)
+    C = np.einsum('fji,fjk,fkl->fil', T, C, T)
     # C = T.T @ C @ T
     aa = C[:, 0, 0]
     bb = C[:, 0, 1]*2
