@@ -141,6 +141,11 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
             self.r = np.empty((nEllipses, nPts))
             self.jacob_latentParameters = np.empty((nEllipses, 6, 5))
 
+            # tmps
+            self.grad = np.empty((nEllipses, nPts, 6))
+            self.barrier = np.empty(nEllipses)
+            self.DeterminantConic = np.empty(nEllipses)
+
     struct = struct_t()
 
     Fprim = np.array([
@@ -250,12 +255,13 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
         X = M - Xbits
 
         # gradient for AML cost function (row vector)
-        grad = np.einsum('fpij,fj->fpi', X, t)/struct.r[keep_going, :, None]
+        struct.grad[keep_going, ...] = np.einsum(
+            'fpij,fj->fpi', X, t)/struct.r[keep_going, :, None]
 
         # build up jacobian matrix
         struct.jacobian_matrix[keep_going, ...] = np.einsum(
             'fpi,fij->fpj',
-            grad, jacob_latentParameters)
+            struct.grad[keep_going, ...], jacob_latentParameters)
 
         # approximate Hessian matrix
         # struct.H = struct.jacobian_matrix.T @ struct.jacobian_matrix
@@ -294,7 +300,7 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
         # by using a barrier
         tIt = np.einsum('fi,ij,fj->f', t, Identity, t)
         tFt = np.einsum('fi,ij,fj->f', t, F, t)
-        barrier = tIt/tFt
+        struct.barrier[keep_going] = tIt/tFt
 
         # Second criterion checks to see if the determinant of conic approaches
         # zero
@@ -312,7 +318,7 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
                 t[:, 4][:, None]/2,
                 t[:, 5][:, None]), axis=1)[:, None, :],
         ), axis=1)
-        DeterminantConic = np.linalg.det(M)
+        struct.DeterminantConic[keep_going] = np.linalg.det(M)
 
         # Check for various stopping criteria to end the main loop
         # TODO: clean this up -- it's a little messy...
@@ -351,15 +357,16 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
         eta_not_updated_idx = np.logical_not(eta_updated_idx)
         if np.any(eta_not_updated_idx):
             stop_local_idx = (np.linalg.norm(
-                grad[eta_not_updated_idx, ...],
-                axis=-1, keepdims=True) < struct.tolGrad).squeeze()
+                struct.grad[eta_not_updated_idx, ...],
+                axis=(1, 2), ord=2) < struct.tolGrad).squeeze()
             stop_idx = np.atleast_1d(
                 np.argwhere(eta_not_updated_idx).squeeze())[stop_local_idx]
             keep_going[stop_idx] = False
 
             stop_local_idx = np.logical_or(
-                np.log(barrier) > struct.tolBar,
-                np.abs(DeterminantConic) < struct.tolDet)
+                np.log(struct.barrier[eta_not_updated_idx]) > struct.tolBar,
+                np.abs(struct.DeterminantConic[eta_not_updated_idx])
+                < struct.tolDet)
             stop_idx = np.atleast_1d(
                 np.argwhere(eta_not_updated_idx).squeeze())[stop_local_idx]
             keep_going[stop_idx] = False
