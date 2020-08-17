@@ -54,7 +54,7 @@ def normalize_data_isotropically(x, y):
 
     # isotropic scaling factor
     s = np.sqrt((1/(2*nPoints))*np.sum(
-        (points[0, ...] - meanX)**2 + (points[1, ...] - meanY)**2, axis=-1))
+        (points[0, ...] - meanX[:, None])**2 + (points[1, ...] - meanY[:, None])**2, axis=-1))
     T = np.concatenate((
         np.concatenate((1/s[:, None], np.zeros((nEllipses, 1)), (-meanX/s)[:, None]), axis=1)[:, None, :],
         np.concatenate((np.zeros((nEllipses, 1)), 1/s[:, None], (-meanY/s)[:, None]), axis=1)[:, None, :],

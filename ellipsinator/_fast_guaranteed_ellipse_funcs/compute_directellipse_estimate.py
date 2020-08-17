@@ -56,7 +56,7 @@ def compute_directellipse_estimates(x, y):
     # theta = direct_ellipse_fit(normalizedPoints.T)
     # or equivalently:
     theta = fit_ellipse_halir(xn, yn)
-    theta /= np.linalg.norm(theta, axis=-1)
+    theta /= np.linalg.norm(theta, axis=-1, keepdims=True)
 
     a = theta[:, 0]
     b = theta[:, 1]
@@ -86,4 +86,4 @@ def compute_directellipse_estimates(x, y):
         dd[:, None],
         ee[:, None],
         ff[:, None]), axis=-1)
-    return theta/np.linalg.norm(theta, axis=-1)
+    return theta/np.linalg.norm(theta, axis=-1, keepdims=True)

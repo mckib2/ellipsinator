@@ -65,12 +65,12 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, covList, maxiter=200):
         eta[:, 3][:, None],
         eta[:, 4][:, None],
     ), axis=1)
-    t /= np.linalg.norm(t, axis=-1)
+    t /= np.linalg.norm(t, axis=-1, keepdims=True)
 
     # various variable initialisations
     ##################################
     # primary loop variable
-    keep_going = True
+    keep_going = np.ones(nEllipses, dtype=bool)
     # in some case a LevenbergMarquardtStep does not decrease the cost
     # function and so the parameters (eta) are not updated
 
@@ -78,8 +78,9 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, covList, maxiter=200):
         '''simply hold parameters.'''
         def __init__(self):
             self.nEllipses = nEllipses
-            self.eta_updated = False
-            self.lamda = 0.01  # damping parameter in LevenbergMarquadtStep
+            self.keep_going = keep_going
+            self.eta_updated = np.zeros(nEllipses, dtype=bool)
+            self.lamda = np.ones(nEllipses)*0.01  # damping parameter in LevenbergMarquadtStep
             self.k = 0  # loop counter
             # used to modify the tradeoff between gradient descent and hessian based
             # descent in LevenbergMarquadtStep
@@ -116,6 +117,7 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, covList, maxiter=200):
             # various initial memory allocations
             ####################################
             # allocate space for cost of each iteration
+            # TODO: don't allocate maxiter -- only need 2!
             self.cost = np.zeros((nEllipses, maxiter))
             # allocate space for the latent parameters of each iteration
             self.eta = np.zeros((nEllipses, 5, maxiter))
@@ -126,13 +128,13 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, covList, maxiter=200):
             # make parameter vector a unit norm vector for numerical stability
             # t = t / norm(t);
             # store the parameters associated with the first iteration
-            self.t[..., self.k] = t
-            self.eta[..., self.k] = eta
+            self.t[..., 0] = t
+            self.eta[..., 0] = eta
             # start with some random search direction (here we choose all 1's)
-            # we can initialise with anything we want, so long as the norm of the
-            # vector is not smaller than tolDeta. The initial search direction
-            # is not used in any way in the algorithm.
-            self.delta[..., self.k] = np.ones(5)
+            # we can initialise with anything we want, so long as the norm of
+            # the vector is not smaller than tolDeta. The initial search
+            # direction is not used in any way in the algorithm.
+            self.delta[..., 0] = np.ones(5)
 
             # More params
             self.jacobian_matrix = None
@@ -154,7 +156,7 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, covList, maxiter=200):
     Identity = np.eye(6)
 
     # main estimation loop
-    while keep_going and struct.k < maxiter:
+    while np.any(keep_going) and struct.k < maxiter:
 
         # allocate space for residuals
         # struct.r = np.zeros(struct.numberOfPoints)
@@ -172,7 +174,7 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, covList, maxiter=200):
             eta[:, 3][:, None],
             eta[:, 4][:, None],
         ), axis=1)
-        
+
         # jacobian matrix of the transformation from eta to theta parameters
         jacob_latentParameters = np.concatenate((
             np.concatenate([np.zeros((nEllipses, 1))]*5, axis=1)[:, None, :],
@@ -185,11 +187,11 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, covList, maxiter=200):
 
         # we impose the additional constraint that theta will be unit norm
         # so we need to modify the jacobian matrix accordingly
-        Pt = np.eye(6) - np.einsum('fi,fj->fij', t, t)/np.linalg.norm(t, axis=-1)**2
-        jacob_latentParameters = 1/np.linalg.norm(t, axis=-1)*np.einsum(
+        Pt = np.eye(6) - np.einsum('fi,fj->fij', t, t)/np.linalg.norm(t, axis=-1)[:, None, None]**2
+        jacob_latentParameters = 1/np.linalg.norm(t, axis=-1)[:, None, None]*np.einsum(
             'fij,fjk->fik', Pt, jacob_latentParameters)
         # unit norm constraint
-        t /= np.linalg.norm(t, axis=-1)
+        t /= np.linalg.norm(t, axis=-1, keepdims=True)
 
         # residuals computed on all data points
         # NOTE: loop in original, we vectorize where possible
@@ -235,7 +237,7 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, covList, maxiter=200):
         struct.H = np.einsum('fji,fjk->fik', struct.jacobian_matrix, struct.jacobian_matrix)
 
         # sum of squares cost for the current iteration
-        struct.cost[:, struct.k] = struct.r @ struct.r.T
+        struct.cost[:, struct.k] = np.einsum('fi,fi->f', struct.r, struct.r)
 
         struct.jacob_latentParameters = jacob_latentParameters
 
@@ -246,16 +248,16 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, covList, maxiter=200):
 
         # convert latent variables into length-6 vector (called t) representing
         # the equation of an ellipse
-        eta = struct.eta[..., struct.k+1]
-        t = np.concatenate((  # (nEllipses, 6)
-            np.ones((nEllipses, 1)),
+        eta = struct.eta[keep_going, :, struct.k+1]
+        t = np.concatenate((  # (currrently going nEllipses, 6)
+            np.ones((np.sum(keep_going), 1)),
             2*eta[:, 0][:, None],
             (eta[:, 0]**2 + np.abs(eta[:, 1])**2)[:, None],
             eta[:, 2][:, None],
             eta[:, 3][:, None],
             eta[:, 4][:, None],
         ), axis=1)
-        t /= np.linalg.norm(t, axis=-1)
+        t /= np.linalg.norm(t, axis=-1, keepdims=True)
 
         # First criterion checks to see if discriminant approaches zero
         # by using a barrier
@@ -273,32 +275,49 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, covList, maxiter=200):
         DeterminantConic = np.linalg.det(M)
 
         # Check for various stopping criteria to end the main loop
-        # TODO: consider each ellipse index separately!
-        if struct.eta_updated:
-            etak = struct.eta[..., struct.k]
-            etak1 = struct.eta[..., struct.k+1]
 
-            norm_minus = np.linalg.norm(etak1 - etak, axis=-1)
-            norm_plus = np.linalg.norm(etak1 + etak, axis=-1)
+        # For each ellipse that has eta_updated
+        eta_updated_idx = struct.eta_updated
+        if np.any(eta_updated_idx):
+            etak = struct.eta[eta_updated_idx, :, struct.k]
+            etak1 = struct.eta[eta_updated_idx, :, struct.k+1]
+            norm_minus = np.linalg.norm(etak1 - etak, axis=-1, keepdims=True)
+            norm_plus = np.linalg.norm(etak1 + etak, axis=-1, keepdims=True)
+            stop_local_idx = (np.min(np.stack((norm_minus, norm_plus)), axis=0) < struct.tolEta).squeeze()
+            stop_idx = np.atleast_1d(np.argwhere(eta_updated_idx).squeeze())[stop_local_idx]
+            keep_going[stop_idx] = False
 
-            costk = struct.cost[:, struct.k]
-            costk1 = struct.cost[:, struct.k+1]
-            if np.all(np.min(np.stack((norm_minus, norm_plus)), axis=0)) < struct.tolEta:
-                keep_going = False
-            elif np.all(np.abs(costk - costk1) < struct.tolCost):
-                keep_going = False
-            elif np.all(np.linalg.norm(struct.delta[..., struct.k+1], axis=-1) < struct.tolDelta):
-                keep_going = False
-        elif np.all(np.linalg.norm(grad, axis=-1) < struct.tolGrad):
-            keep_going = False
-        elif (np.all(np.log(barrier) > struct.tolBar) or
-              np.all(np.abs(DeterminantConic) < struct.tolDet)):
-            keep_going = False
+            costk = struct.cost[eta_updated_idx, struct.k]
+            costk1 = struct.cost[eta_updated_idx, struct.k+1]
+            stop_local_idx = np.abs(costk - costk1) < struct.tolCost
+            stop_idx = np.atleast_1d(np.argwhere(eta_updated_idx).squeeze())[stop_local_idx]
+            keep_going[stop_idx] = False
+
+            stop_local_idx = (np.linalg.norm(
+                struct.delta[eta_updated_idx, :, struct.k+1], axis=-1, keepdims=True) < struct.tolDelta).squeeze()
+            stop_idx = np.atleast_1d(np.argwhere(eta_updated_idx).squeeze())[stop_local_idx]
+            keep_going[stop_idx] = False
+
+        eta_not_updated_idx = np.logical_not(eta_updated_idx)
+        if np.any(eta_not_updated_idx):
+            stop_local_idx = (np.linalg.norm(grad[eta_not_updated_idx, ...], axis=-1, keepdims=True) < struct.tolGrad).squeeze()
+            stop_idx = np.atleast_1d(np.argwhere(eta_not_updated_idx).squeeze())[stop_local_idx]
+            keep_going[stop_idx] = False
+
+            stop_local_idx = np.logical_or(np.log(barrier) > struct.tolBar, np.abs(DeterminantConic) < struct.tolDet)
+            stop_idx = np.atleast_1d(np.argwhere(eta_not_updated_idx).squeeze())[stop_local_idx]
+            keep_going[stop_idx] = False
 
         struct.k += 1
+        struct.keep_going = keep_going
 
     iterations = struct.k
-    theta = struct.t[..., struct.k]
-    theta /= np.linalg.norm(theta, axis=-1)
+    # theta = struct.t[..., struct.k]
+    theta = np.empty(struct.t.shape[:-1])
+    for ii in range(nEllipses):
+        # Find the last nonzero t for this ellipse
+        last_iter = np.sum(np.abs(struct.t[ii, ...]), axis=0).nonzero()[0][-1]
+        theta[ii, ...] = struct.t[ii, ..., last_iter]
+    theta /= np.linalg.norm(theta, axis=-1, keepdims=True)
 
     return(theta, iterations)

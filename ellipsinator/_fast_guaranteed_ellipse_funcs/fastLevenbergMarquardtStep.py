@@ -43,19 +43,20 @@ def fastLevenbergMarquardtStep(struct, rho):
     # extract variables from data structure
     #######################################
 
-    jacobian_matrix = struct.jacobian_matrix
-    r = struct.r
-    lamda = struct.lamda
-    delta = struct.delta[..., struct.k]
+    keep_going = struct.keep_going
+    jacobian_matrix = struct.jacobian_matrix[keep_going, ...]
+    r = struct.r[keep_going, :]
+    lamda = struct.lamda[keep_going]
+    delta = struct.delta[keep_going, :, struct.k]
     damping_multiplier = struct.damping_multiplier
     damping_divisor = struct.damping_divisor
-    current_cost = struct.cost[:, struct.k]
-    x, y = struct.x, struct.y
-    covList = struct.covList
-    H = struct.H
-    jlp = struct.jacob_latentParameters
-    eta = struct.eta[..., struct.k]
-    nEllipses = struct.nEllipses
+    current_cost = struct.cost[keep_going, struct.k]
+    covList = struct.covList[:, keep_going, ...]
+    H = struct.H[keep_going, ...]
+    jlp = struct.jacob_latentParameters[keep_going, ...]
+    eta = struct.eta[keep_going, :, struct.k]
+    nEllipses = np.sum(keep_going)
+    x, y = struct.x[keep_going, ...], struct.y[keep_going, ...]
 
     # convert latent variables into length-6 vector (called t) representing
     # the equation of an ellipse
@@ -68,7 +69,7 @@ def fastLevenbergMarquardtStep(struct, rho):
         eta[:, 4][:, None],
     ), axis=1)
     # we impose unit norm constraint on theta
-    t /= np.linalg.norm(t)
+    t /= np.linalg.norm(t, axis=-1, keepdims=True)
 
     ############################################################
     # compute two potential updates for theta based on different
@@ -76,7 +77,7 @@ def fastLevenbergMarquardtStep(struct, rho):
     ############################################################
 
     jacob = np.einsum('fji,fj->fi', jacobian_matrix, r)
-    DMP = np.einsum('fji,fjk->fik', jlp, jlp)*lamda
+    DMP = np.einsum('fji,fjk->fik', jlp, jlp)*lamda[:, None, None]
     # update_a = -1*(H + DMP)\jacob
     update_a = np.linalg.solve(-1*(H + DMP), jacob)
 
@@ -101,7 +102,7 @@ def fastLevenbergMarquardtStep(struct, rho):
         eta_potential_a[:, 3][:, None],
         eta_potential_a[:, 4][:, None],
     ), axis=1)
-    t_potential_a /= np.linalg.norm(t_potential_a, axis=-1)
+    t_potential_a /= np.linalg.norm(t_potential_a, axis=-1, keepdims=True)
 
     t_potential_b = np.concatenate((
         np.ones((nEllipses, 1)),
@@ -111,7 +112,7 @@ def fastLevenbergMarquardtStep(struct, rho):
         eta_potential_b[:, 3][:, None],
         eta_potential_b[:, 4][:, None],
     ), axis=1)
-    t_potential_b /= np.linalg.norm(t_potential_b, axis=-1)
+    t_potential_b /= np.linalg.norm(t_potential_b, axis=-1, keepdims=True)
 
     ########################################################
     # compute new residuals and costs based on these updates
@@ -149,43 +150,49 @@ def fastLevenbergMarquardtStep(struct, rho):
     # determine appropriate damping and if possible select an update
     ################################################################
 
-    # TODO: consider each ellipse index separately!
-    if cost_a >= current_cost and cost_b >= current_cost:
-        # neither update reduced the cost
-        struct.eta_updated = False
-        # no change in the cost
-        struct.cost[:, struct.k+1] = current_cost
-        # no change in parameters
-        struct.eta[..., struct.k+1] = eta
-        struct.t[..., struct.k+1] = t
-        # no changes in step direction
-        struct.delta[..., struct.k+1] = delta
-        # next iteration add more Identity matrix
-        struct.lamda *= damping_multiplier
-    elif cost_b < current_cost:
-        # update 'b' reduced the cost function
-        struct.eta_updated = True
-        # store the new cost
-        struct.cost[:, struct.k+1] = cost_b
-        # choose update 'b'
-        struct.eta[..., struct.k+1] = eta_potential_b
-        struct.t[..., struct.k+1] = t_potential_b.squeeze()
-        # store the step direction
-        struct.delta[..., struct.k+1] = update_b
-        # next iteration add less Identity matrix
-        struct.lamda /= damping_divisor
-    else:
-        # update 'a' reduced the cost function
-        struct.eta_updated = True
-        # store the new cost
-        struct.cost[:, struct.k+1] = cost_a
-        # choose update 'a'
-        struct.eta[..., struct.k+1] = eta_potential_a
-        struct.t[..., struct.k+1] = t_potential_a
-        # store the step direction
-        struct.delta[..., struct.k+1] = update_a
-        # keep the same damping for the next iteration
-        struct.lamda = lamda
+    # Global indices of all ellipses that are still being fit
+    idx = np.atleast_1d(np.argwhere(keep_going).squeeze())
+
+    # neither update reduced the cost
+    no_update_idx = np.logical_and(
+        cost_a >= current_cost, cost_b >= current_cost)
+    struct.eta_updated[idx[no_update_idx]] = False
+    # no change in the cost
+    struct.cost[idx[no_update_idx], struct.k+1] = current_cost[no_update_idx]
+    # no change in parameters
+    struct.eta[idx[no_update_idx], :, struct.k+1] = eta[no_update_idx, :]
+    struct.t[idx[no_update_idx], :, struct.k+1] = t[no_update_idx, :]
+    # no changes in step direction
+    struct.delta[idx[no_update_idx], :, struct.k+1] = delta[no_update_idx, :]
+    # next iteration add more Identity matrix
+    struct.lamda[idx[no_update_idx]] *= damping_multiplier
+
+    # update 'b' reduced the cost function
+    cost_b_idx = cost_b < current_cost
+    struct.eta_updated[idx[cost_b_idx]] = True
+    # store the new cost
+    struct.cost[idx[cost_b_idx], struct.k+1] = cost_b[cost_b_idx]
+    # choose update 'b'
+    struct.eta[idx[cost_b_idx], :, struct.k+1] = eta_potential_b[cost_b_idx, :]
+    struct.t[idx[cost_b_idx], :, struct.k+1] = t_potential_b[cost_b_idx, :]
+    # store the step direction
+    struct.delta[idx[cost_b_idx], :, struct.k+1] = update_b[cost_b_idx, :]
+    # next iteration add less Identity matrix
+    struct.lamda[idx[cost_b_idx]] /= damping_divisor
+
+    # update 'a' reduced the cost function
+    cost_a_idx = np.logical_and(
+        cost_a < current_cost, np.logical_not(cost_b_idx))
+    struct.eta_updated[idx[cost_a_idx]] = True
+    # store the new cost
+    struct.cost[idx[cost_a_idx], struct.k+1] = cost_a[cost_a_idx]
+    # choose update 'a'
+    struct.eta[idx[cost_a_idx], :, struct.k+1] = eta_potential_a[cost_a_idx, :]
+    struct.t[idx[cost_a_idx], :, struct.k+1] = t_potential_a[cost_a_idx, :]
+    # store the step direction
+    struct.delta[idx[cost_a_idx], :, struct.k+1] = update_a[cost_a_idx, :]
+    # keep the same damping for the next iteration
+    struct.lamda[idx[cost_a_idx]] = lamda[cost_a_idx]
 
     # return a data structure containing all the updates
     return struct

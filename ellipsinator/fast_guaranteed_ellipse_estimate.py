@@ -92,7 +92,6 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     '''
 
     x, y, only_one = _fit_ellipse_process_params(x, y)
-    assert only_one, 'This function only fits a single ellipse!'
     nPts = x.shape[1]
 
     # Check to see if the user passed in their own list of covariance matrices
@@ -116,7 +115,7 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     # transfer initialParameters to normalized coordinate system
     # the formula appears in the paper [3]_
     initialEllipseParameters /= np.linalg.norm(
-        initialEllipseParameters, axis=-1)
+        initialEllipseParameters, axis=-1, keepdims=True)
     E = np.diag([1, 1/2, 1, 1/2, 1/2, 1])
     # permutation matrix for interchanging 3rd and 4th
     # entries of a length-6 vector
@@ -147,7 +146,7 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
         P34D3pinv, np.linalg.inv(kTT), D3P34E, initialEllipseParameters)
     initialEllipseParametersNormalizedSpace = np.linalg.solve(E, b.T).T
     initialEllipseParametersNormalizedSpace /= np.linalg.norm(
-        initialEllipseParametersNormalizedSpace, axis=-1)
+        initialEllipseParametersNormalizedSpace, axis=-1, keepdims=True)
 
     # Becase the data points are now in a new normalised coordinate system,
     # the data covariance matrices also need to be tranformed into the
@@ -195,7 +194,7 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
 
     ellipseParametersFinal, iterations = fastGuaranteedEllipseFit(
         latentParameters, xn, yn, normalised_CovList)
-    ellipseParametersFinal /= np.linalg.norm(ellipseParametersFinal)
+    ellipseParametersFinal /= np.linalg.norm(ellipseParametersFinal, axis=-1, keepdims=True)
 
     # convert final ellipse parameters back to the original coordinate system
     # P34D3pinv @ kTT.T @ D3P34E @ ellipseParametersFinal
@@ -203,9 +202,12 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
         'ij,fkj,kl,fl->fi',
         P34D3pinv, kTT, D3P34E, ellipseParametersFinal)
     estimatedParameters = np.linalg.solve(E, b.T).T
-    estimatedParameters /= np.linalg.norm(estimatedParameters, axis=-1)
-    estimatedParameters *= np.sign(estimatedParameters[:, -1])
+    estimatedParameters /= np.linalg.norm(
+        estimatedParameters, axis=-1, keepdims=True)
+    estimatedParameters *= np.sign(estimatedParameters[:, -1][:, None])
 
+    if only_one:
+        estimatedParameters = estimatedParameters.squeeze()
     return(estimatedParameters, iterations)
 
 
