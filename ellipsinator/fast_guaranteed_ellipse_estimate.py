@@ -48,6 +48,8 @@ def fast_guaranteed_ellipse_estimate(x, y=None, cov=None, ret_iters=False):
         coordinates of each data point. If this parameter is not specified
         then  default isotropic (diagonal) and homogeneous (same noise level
         for each data point) covariance matrices are assumed.
+    ret_iters : bool, optional
+        Return the number of iterations taken to fit each ellipse.
 
     Returns
     -------
@@ -59,6 +61,9 @@ def fast_guaranteed_ellipse_estimate(x, y=None, cov=None, ret_iters=False):
             a*x^2+ b * x y + c * y^2 + d * x + e*y + f = 0
 
         with the additional result that b^2 - 4 a c < 0.
+    niters : array_like (M,), optional
+        If ret_iters=True, then the number of iterations taken to fit
+        each of the M ellipses is returned.
 
     Notes
     -----
