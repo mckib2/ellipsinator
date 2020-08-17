@@ -17,7 +17,7 @@ from ._fast_guaranteed_ellipse_funcs.fastGuaranteedEllipseFit import (
     fastGuaranteedEllipseFit)
 
 
-def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
+def fast_guaranteed_ellipse_estimate(x, y=None, cov=None, ret_iters=False):
     '''Guaranteed Ellipse Fitting with a Confidence Region and an
        Uncertainty Measure for Centre, Axes and Orientation
 
@@ -35,28 +35,24 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
 
     Parameters
     ---------
-    x : array_like (N,)
-        If y is None, x is an array of complex numbers that plots an
-        ellipse in the complex plane (i.e., plot x.real vs x.imag).
+    x : array_like ([M,] N)
+        If y is None, x is an array of complex numbers that plot M
+        ellipses in the complex plane (i.e., plot x.real vs x.imag).
         If y is not None, x are the x-axis coordinates assumed to
-        be on the ellipse with N points (x, y).
-    y : None or array_like (N,), optional
+        be on M ellipses with N points (x, y).
+    y : None or array_like ([M,] N), optional
         If y is not None, y are the y-axis coordinates assumed to
-        be on the ellipse with N points (x, y).
-    covList : list of array_like, optional
-        a list of N 2x2 covariance matrices
-        representing the uncertainty of the
-        coordinates of each data point.
-        if this parameter is not specified
-        then  default isotropic  (diagonal)
-        and homogeneous (same noise level
-        for each data point) covariance
-        matrices are assumed.
+        be on M ellipses with N points (x, y).
+    cov : None or array_like (N, M, 2, 2), optional
+        NxM 2x2 covariance matrices representing the uncertainty of the
+        coordinates of each data point. If this parameter is not specified
+        then  default isotropic (diagonal) and homogeneous (same noise level
+        for each data point) covariance matrices are assumed.
 
     Returns
     -------
-    res : array_like (6,)
-        a length-6 vector containing an estimate of the ellipse
+    res : array_like ([M], 6)
+        M length-6 vectors containing estimates of the M ellipse
         parameters theta = [a b c d e f] associated with the ellipse
         equation
 
@@ -66,15 +62,7 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
 
     Notes
     -----
-    Implements the algorithm described in [2]_.
-
-    Much of the Python port was a mechanical process, but some obvious
-    optimizations were taken opportunistically.  Many loops were removed
-    and replaced with vectorized implementations.
-
-    Also note that this function differs from some of the other fitting
-    methods in this package in that it only fits a single ellipse at a
-    time. Work is underway to modify it to work with multiple ellipses.
+    A vectorized implementation the algorithm described in [2]_.
 
     Original Author of MATLAB: Zygmunt L. Szpak (zygmunt.szpak@gmail.com)
     Date: March 2014
@@ -95,7 +83,7 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     nPts = x.shape[1]
 
     # Check to see if the user passed in their own list of covariance matrices
-    if covList is None:
+    if cov is None:
         # Generate a list of diagonal covariance matrices
         class UnformDict:
             '''Return val for every requested key.'''
@@ -104,7 +92,7 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
 
             def __getitem__(self, _key):
                 return self.val
-        covList = UnformDict(np.eye(2))
+        cov = UnformDict(np.eye(2))
 
     # estimate an initial ellipse using the direct ellipse fit method
     initialEllipseParameters = compute_directellipse_estimates(x, y)
@@ -156,15 +144,15 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     # matrices by zeros) and by  multiply the covariance matrices by the
     # matrix T from the left and T' from the right.
 
-    normalised_CovList = np.empty((nPts, x.shape[0], 2, 2))
+    normalised_Cov = np.empty((nPts, x.shape[0], 2, 2))
     for iPts in range(nPts):
         covX_i = np.zeros((3, 3))
-        covX_i[0:2, 0:2] = covList[iPts]
+        covX_i[0:2, 0:2] = cov[iPts]
         # covX_i = T @ covX_i @ T.T
         covX_i = np.einsum('fij,jk,flk->fil', T, covX_i, T)
         # the upper-left 2x2 matrix now represents the covariance of the
         # coordinates of the data point in the normalised coordinate system
-        normalised_CovList[iPts] = covX_i[:, 0:2, 0:2]
+        normalised_Cov[iPts] = covX_i[:, 0:2, 0:2]
 
     # To guarantee an ellipse we utilise a special parameterisation which
     # by definition excludes the possiblity of a hyperbola. In theory
@@ -193,8 +181,9 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
     ), axis=-1)
 
     ellipseParametersFinal, iterations = fastGuaranteedEllipseFit(
-        latentParameters, xn, yn, normalised_CovList)
-    ellipseParametersFinal /= np.linalg.norm(ellipseParametersFinal, axis=-1, keepdims=True)
+        latentParameters, xn, yn, normalised_Cov)
+    ellipseParametersFinal /= np.linalg.norm(
+        ellipseParametersFinal, axis=-1, keepdims=True)
 
     # convert final ellipse parameters back to the original coordinate system
     # P34D3pinv @ kTT.T @ D3P34E @ ellipseParametersFinal
@@ -208,7 +197,9 @@ def fast_guaranteed_ellipse_estimate(x, y=None, covList=None):
 
     if only_one:
         estimatedParameters = estimatedParameters.squeeze()
-    return(estimatedParameters, iterations)
+    if ret_iters:
+        return estimatedParameters, iterations
+    return estimatedParameters
 
 
 if __name__ == '__main__':

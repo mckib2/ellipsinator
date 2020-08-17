@@ -3,15 +3,14 @@
 import numpy as np
 
 
-def fastLevenbergMarquardtStep(struct, rho):
-    '''
+def fastLevenbergMarquardtStep(struct, rho=2):
+    '''Minimize maximum likelihood cost function of an ellipse.
 
     This function is used in the main loop of guaranteedEllipseFit in the
     process of minimizing an approximate maximum likelihood cost function
     of an ellipse fit to data.  It computes an update for the parameters
     representing the ellipse, using the method of Levenberg-Marquardt for
-    non-linear optimisation.
-    See: http://en.wikipedia.org/wiki/Levenberg%E2%80%93Marquardt_algorithm
+    non-linear optimisation.  See [1]_.
 
     However, unlike the traditional LevenbergMarquardt step, we do not
     add a multiple of the identity matrix to the approximate Hessian,
@@ -24,37 +23,42 @@ def fastLevenbergMarquardtStep(struct, rho):
 
     Parameters
     ----------
-    struct
-        a data structure containing various parameters
-        needed for the optimisation process.
+    struct : struct_t
+        A data structure containing various parameters needed for the
+        optimisation process.
+    rho : float, optional
 
     Returns
     -------
-        the same data structure 'struct', except that relevant fields
+    struct : struct_t
+        The same data structure 'struct', except that relevant fields
         have been updated
-
 
     Notes
     -----
-    Zygmunt L. Szpak (c) 2014
-    Last modified 18/3/2014
+    Original MATLAB implementation by Zygmunt L. Szpak, 18/3/2014.
+
+    References
+    ----------
+    .. [1] http://en.wikipedia.org/wiki/Levenberg%E2%80%93Marquardt_algorithm
     '''
 
     # extract variables from data structure
     #######################################
 
+    # Only modify ellipse estimates that are going!
     keep_going = struct.keep_going
     jacobian_matrix = struct.jacobian_matrix[keep_going, ...]
     r = struct.r[keep_going, :]
     lamda = struct.lamda[keep_going]
-    delta = struct.delta[keep_going, :, struct.k]
+    delta = struct.delta[keep_going, :, 0]
     damping_multiplier = struct.damping_multiplier
     damping_divisor = struct.damping_divisor
-    current_cost = struct.cost[keep_going, struct.k]
-    covList = struct.covList[:, keep_going, ...]
+    current_cost = struct.cost[keep_going, 0]
+    cov = struct.cov[:, keep_going, ...]
     H = struct.H[keep_going, ...]
     jlp = struct.jacob_latentParameters[keep_going, ...]
-    eta = struct.eta[keep_going, :, struct.k]
+    eta = struct.eta[keep_going, :, 0]
     nEllipses = np.sum(keep_going)
     x, y = struct.x[keep_going, ...], struct.y[keep_going, ...]
 
@@ -94,20 +98,22 @@ def fastLevenbergMarquardtStep(struct, rho):
     eta_potential_b = eta + update_b
 
     # we need to convert from eta to theta and impose unit norm constraint
+    row3 = eta_potential_a[:, 0]**2 + np.abs(eta_potential_a[:, 1])**rho
     t_potential_a = np.concatenate((
         np.ones((nEllipses, 1)),
         2*eta_potential_a[:, 0][:, None],
-        (eta_potential_a[:, 0]**2 + np.abs(eta_potential_a[:, 1])**rho)[:, None],
+        row3[:, None],
         eta_potential_a[:, 2][:, None],
         eta_potential_a[:, 3][:, None],
         eta_potential_a[:, 4][:, None],
     ), axis=1)
     t_potential_a /= np.linalg.norm(t_potential_a, axis=-1, keepdims=True)
 
+    row3 = eta_potential_b[:, 0]**2 + np.abs(eta_potential_b[:, 1])**rho
     t_potential_b = np.concatenate((
         np.ones((nEllipses, 1)),
         2*eta_potential_b[:, 0][:, None],
-        (eta_potential_b[:, 0]**2 + np.abs(eta_potential_b[:, 1])**rho)[:, None],
+        row3[:, None],
         eta_potential_b[:, 2][:, None],
         eta_potential_b[:, 3][:, None],
         eta_potential_b[:, 4][:, None],
@@ -129,14 +135,16 @@ def fastLevenbergMarquardtStep(struct, rho):
     ), axis=-1)
 
     # derivative of transformed data point
+    ones = np.ones_like(x)
+    zeros = np.zeros_like(x)
     dux = np.concatenate((  # (nEllipses, nPts, 6, 2)
-        np.stack((2*x, y, np.zeros_like(y), np.ones_like(x), np.zeros_like(x), np.zeros_like(x)))[..., None],
-        np.stack((np.zeros_like(x), x, 2*y, np.zeros_like(x), np.ones_like(x), np.zeros_like(x)))[..., None],
+        np.stack((2*x, y, zeros, ones, zeros, zeros))[..., None],
+        np.stack((zeros, x, 2*y, zeros, ones, zeros))[..., None],
     ), axis=-1).transpose((1, 2, 0, 3))
 
     # outer products
     A = np.einsum('fpi,fpj->fpij', ux, ux)
-    B = np.einsum('fpij,pfjk,fplk->fpil', dux, covList, dux)
+    B = np.einsum('fpij,pfjk,fplk->fpil', dux, cov, dux)
     t_aBt_a = np.einsum('fi,fpij,fj->fp', t_potential_a, B, t_potential_a)
     t_aAt_a = np.einsum('fi,fpij,fj->fp', t_potential_a, A, t_potential_a)
     t_bBt_b = np.einsum('fi,fpij,fj->fp', t_potential_b, B, t_potential_b)
@@ -158,12 +166,12 @@ def fastLevenbergMarquardtStep(struct, rho):
         cost_a >= current_cost, cost_b >= current_cost)
     struct.eta_updated[idx[no_update_idx]] = False
     # no change in the cost
-    struct.cost[idx[no_update_idx], struct.k+1] = current_cost[no_update_idx]
+    struct.cost[idx[no_update_idx], 1] = current_cost[no_update_idx]
     # no change in parameters
-    struct.eta[idx[no_update_idx], :, struct.k+1] = eta[no_update_idx, :]
-    struct.t[idx[no_update_idx], :, struct.k+1] = t[no_update_idx, :]
+    struct.eta[idx[no_update_idx], :, 1] = eta[no_update_idx, :]
+    struct.t[idx[no_update_idx], :, 1] = t[no_update_idx, :]
     # no changes in step direction
-    struct.delta[idx[no_update_idx], :, struct.k+1] = delta[no_update_idx, :]
+    struct.delta[idx[no_update_idx], :, 1] = delta[no_update_idx, :]
     # next iteration add more Identity matrix
     struct.lamda[idx[no_update_idx]] *= damping_multiplier
 
@@ -171,12 +179,12 @@ def fastLevenbergMarquardtStep(struct, rho):
     cost_b_idx = cost_b < current_cost
     struct.eta_updated[idx[cost_b_idx]] = True
     # store the new cost
-    struct.cost[idx[cost_b_idx], struct.k+1] = cost_b[cost_b_idx]
+    struct.cost[idx[cost_b_idx], 1] = cost_b[cost_b_idx]
     # choose update 'b'
-    struct.eta[idx[cost_b_idx], :, struct.k+1] = eta_potential_b[cost_b_idx, :]
-    struct.t[idx[cost_b_idx], :, struct.k+1] = t_potential_b[cost_b_idx, :]
+    struct.eta[idx[cost_b_idx], :, 1] = eta_potential_b[cost_b_idx, :]
+    struct.t[idx[cost_b_idx], :, 1] = t_potential_b[cost_b_idx, :]
     # store the step direction
-    struct.delta[idx[cost_b_idx], :, struct.k+1] = update_b[cost_b_idx, :]
+    struct.delta[idx[cost_b_idx], :, 1] = update_b[cost_b_idx, :]
     # next iteration add less Identity matrix
     struct.lamda[idx[cost_b_idx]] /= damping_divisor
 
@@ -185,12 +193,12 @@ def fastLevenbergMarquardtStep(struct, rho):
         cost_a < current_cost, np.logical_not(cost_b_idx))
     struct.eta_updated[idx[cost_a_idx]] = True
     # store the new cost
-    struct.cost[idx[cost_a_idx], struct.k+1] = cost_a[cost_a_idx]
+    struct.cost[idx[cost_a_idx], 1] = cost_a[cost_a_idx]
     # choose update 'a'
-    struct.eta[idx[cost_a_idx], :, struct.k+1] = eta_potential_a[cost_a_idx, :]
-    struct.t[idx[cost_a_idx], :, struct.k+1] = t_potential_a[cost_a_idx, :]
+    struct.eta[idx[cost_a_idx], :, 1] = eta_potential_a[cost_a_idx, :]
+    struct.t[idx[cost_a_idx], :, 1] = t_potential_a[cost_a_idx, :]
     # store the step direction
-    struct.delta[idx[cost_a_idx], :, struct.k+1] = update_a[cost_a_idx, :]
+    struct.delta[idx[cost_a_idx], :, 1] = update_a[cost_a_idx, :]
     # keep the same damping for the next iteration
     struct.lamda[idx[cost_a_idx]] = lamda[cost_a_idx]
 
