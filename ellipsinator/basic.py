@@ -101,8 +101,8 @@ def rotate_points(x, y, phi, p=(0, 0)):
     '''
     x = x.flatten()
     y = y.flatten()
-    xr = (x - p[0])*np.cos(phi) - (y - p[0])*np.sin(phi) + p[0]
-    yr = (y - p[1])*np.cos(phi) + (x - p[1])*np.sin(phi) + p[1]
+    xr = np.cos(phi)*(x - p[0]) - np.sin(phi)*(y - p[1]) + p[0]
+    yr = np.sin(phi)*(x - p[0]) + np.cos(phi)*(y - p[1]) + p[1]
     return(xr, yr)
 
 def get_semiaxes(c):
