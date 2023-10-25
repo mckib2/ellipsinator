@@ -1,12 +1,16 @@
-'''Process common input arguments to ellipse fitting methods.'''
+"""Process common input arguments to ellipse fitting methods."""
 
+from typing import Optional
 import logging
 
+import numpy as np
 
-def _fit_ellipse_process_params(x, y):
+
+def _fit_ellipse_process_params(x: np.ndarray, y: Optional[np.ndarray]):
 
     # Convert complex array: (x, y) <=> (x.real, x.imag)
     if y is None:
+        assert np.iscomplex(x), "if y not provided, x must be a complex-valued array"
         x, y = x.real, x.imag
     assert x.shape == y.shape, 'x, y must have the same shape!'
 

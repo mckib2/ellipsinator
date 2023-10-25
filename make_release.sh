@@ -1,11 +1,12 @@
+#!/bin/bash
 
 # Remove any existing distribution archives
 rm -rf dist
 
 # Generate distribution archives
-pip install --upgrade setuptools wheel
-python setup.py sdist bdist_wheel
+python -m pip install --upgrade build setuptools wheel
+python -m build
 
 # Upload
-pip install --upgrade twine
+python -m pip install --upgrade twine
 python -m twine upload dist/*

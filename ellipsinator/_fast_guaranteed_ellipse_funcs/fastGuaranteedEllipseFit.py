@@ -1,15 +1,19 @@
-'''Main fitting loop.'''
+"""Main fitting loop."""
+
+from typing import Tuple
 
 import numpy as np
 
-from .fastLevenbergMarquardtStep import fastLevenbergMarquardtStep
+from ellipsinator._fast_guaranteed_ellipse_funcs.fastLevenbergMarquardtStep import fastLevenbergMarquardtStep
+from ellipsinator._fast_guaranteed_ellipse_funcs.struct_t import StructT
 
 
-def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
-    '''
+def fastGuaranteedEllipseFit(latentParameters: np.ndarray, x: np.ndarray, y: np.ndarray, cov: np.ndarray,
+                             maxiter: int=200) -> Tuple[np.ndarray, int]:
+    """
 
     A vectorized implementation of the ellipse fitting algorithm described
-    in [1]_ modifed to fit M ellipses simultaneously.
+    in [1]_ modified to fit M ellipses simultaneously.
 
     Parameters
     ----------
@@ -27,6 +31,8 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
     cov : array_like (N, M, 2, 2)
         NxM 2x2 covariance matrices representing the uncertainty of the
         coordinates of each data point.
+    maxiter : int, optional
+        Maximum number of iterations to try fitting.
 
     Returns
     -------
@@ -38,6 +44,9 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
 
         with the additional result that b**2 - 4 a c < 0.
 
+    iters : int
+        Number of iterations actually run.
+
     Notes
     -----
     Original MATLAB implementation by Zygmunt L. Szpak.
@@ -47,7 +56,7 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
     .. [1] Z.Szpak, W. Chojnacki and A. van den Hengel "Guaranteed Ellipse
            Fitting with an Uncertainty Measure for Centre, Axes, and
            Orientation"
-    '''
+    """
 
     nEllipses = x.shape[0]
     nPts = x.shape[1]
@@ -73,80 +82,7 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
     # in some case a LevenbergMarquardtStep does not decrease the cost
     # function and so the parameters (eta) are not updated
 
-    class struct_t:
-        '''simply hold parameters.'''
-        def __init__(self):
-            self.nEllipses = nEllipses
-            self.keep_going = keep_going
-            self.eta_updated = np.zeros(nEllipses, dtype=bool)
-            # damping parameter in LevenbergMarquadtStep
-            self.lamda = np.ones(nEllipses)*0.01
-            self.iters = np.zeros(nEllipses, dtype=int)  # loop counter
-            # used to modify the tradeoff between gradient descent and hessian
-            # based descent in LevenbergMarquadtStep
-            self.damping_multiplier = 15
-            # used to modify the tradeoff between gradient descent and hessian
-            # based descent in LevenbergMarquadtStep
-            self.damping_divisor = 1.2
-            # number of data points
-            self.numberOfPoints = nPts
-            # data points that we are going to fit an ellipse to
-            self.x = x
-            self.y = y
-            # a list of 2x2 covariance matrices representing the uncertainty
-            # in the coordinates of the data points
-            self.cov = cov
-
-            # various parameters that determine stopping criteria
-            #####################################################
-            # step-size tolerance
-            self.tolDelta = 1e-7
-            # cost tolerance
-            self.tolCost = 1e-7
-            # parameter tolerance
-            self.tolEta = 1e-7
-            # gradient tolerance
-            self.tolGrad = 1e-7
-            # barrier tolerance (prevent ellipse from converging on parabola)
-            self.tolBar = 15.5
-            # minimum allowable magnitude of conic determinant (prevent ellipse
-            # from convering on degenerate parabola (eg. two parallel lines)
-            self.tolDet = 1e-5
-
-            # various initial memory allocations
-            ####################################
-            # allocate space for cost of each iteration
-            # Don't allocate maxiter -- only need 2 (current/next)!
-            self.cost = np.empty((nEllipses, 2))
-            # allocate space for the latent parameters of each iteration
-            self.eta = np.empty((nEllipses, 5, 2))
-            # and for the parameters representing the ellipse equation
-            self.t = np.empty((nEllipses, 6, 2))
-            # allocate space for the parameter direction of each iteration
-            self.delta = np.empty((nEllipses, 5, 2))
-            # make parameter vector a unit norm vector for numerical stability
-            # t = t / norm(t);
-            # store the parameters associated with the first iteration
-            self.t[..., 0] = t
-            self.eta[..., 0] = eta
-            # start with some random search direction (here we choose all 1's)
-            # we can initialise with anything we want, so long as the norm of
-            # the vector is not smaller than tolDeta. The initial search
-            # direction is not used in any way in the algorithm.
-            self.delta[..., 0] = np.ones(5)
-
-            # More params
-            self.jacobian_matrix = np.empty((nEllipses, nPts, 5))
-            self.H = np.empty((nEllipses, 5, 5))
-            self.r = np.empty((nEllipses, nPts))
-            self.jacob_latentParameters = np.empty((nEllipses, 6, 5))
-
-            # tmps
-            self.grad = np.empty((nEllipses, nPts, 6))
-            self.barrier = np.empty(nEllipses)
-            self.DeterminantConic = np.empty(nEllipses)
-
-    struct = struct_t()
+    struct = StructT(nEllipses=nEllipses, keep_going=keep_going, nPts=nPts, x=x, y=y, cov=cov, t=t, eta=eta)
 
     Fprim = np.array([
         [0, 0, 2],
@@ -384,4 +320,4 @@ def fastGuaranteedEllipseFit(latentParameters, x, y, cov, maxiter=200):
     theta = struct.t[..., 0]
     theta /= np.linalg.norm(theta, axis=-1, keepdims=True)
 
-    return(theta, struct.iters)
+    return theta, struct.iters

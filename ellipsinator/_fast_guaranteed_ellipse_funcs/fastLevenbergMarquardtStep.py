@@ -1,10 +1,12 @@
-'''LevMar implementation.'''
+"""LevMar implementation."""
 
 import numpy as np
 
+from ellipsinator._fast_guaranteed_ellipse_funcs.struct_t import StructT
 
-def fastLevenbergMarquardtStep(struct, rho=2):
-    '''Minimize maximum likelihood cost function of an ellipse.
+
+def fastLevenbergMarquardtStep(struct: StructT, rho: float=2):
+    """Minimize maximum likelihood cost function of an ellipse.
 
     This function is used in the main loop of guaranteedEllipseFit in the
     process of minimizing an approximate maximum likelihood cost function
@@ -23,14 +25,14 @@ def fastLevenbergMarquardtStep(struct, rho=2):
 
     Parameters
     ----------
-    struct : struct_t
+    struct : StructT
         A data structure containing various parameters needed for the
         optimisation process.
     rho : float, optional
 
     Returns
     -------
-    struct : struct_t
+    struct : StructT
         The same data structure 'struct', except that relevant fields
         have been updated
 
@@ -41,7 +43,7 @@ def fastLevenbergMarquardtStep(struct, rho=2):
     References
     ----------
     .. [1] http://en.wikipedia.org/wiki/Levenberg%E2%80%93Marquardt_algorithm
-    '''
+    """
 
     # extract variables from data structure
     #######################################

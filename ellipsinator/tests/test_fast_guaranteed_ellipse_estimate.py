@@ -1,23 +1,23 @@
-'''Tests for fast guaranteed ellipse fitting method.'''
+"""Tests for fast guaranteed ellipse fitting method."""
 
 import unittest
 
 import numpy as np
 
 from ellipsinator import fast_guaranteed_ellipse_estimate
-from .fgee_test_data import data_points
+from ellipsinator.tests.fgee_test_data import data_points
 
 
 class TestGuaranteedFit(unittest.TestCase):
-    '''TestGuaranteedFit.'''
+    """TestGuaranteedFit."""
 
     def test_fit_ellipse(self):
-        '''Use test ellipse given in original MATLAB script.'''
+        """Use test ellipse given in original MATLAB script."""
 
         c = fast_guaranteed_ellipse_estimate(
             data_points[:, 0], data_points[:, 1])
 
-        # coeffs from MATLAB script:
+        # coefficients from MATLAB script:
         c_matlab = np.array([
             3.96548501597781e-06,
             -5.01792302311930e-07,
@@ -29,7 +29,7 @@ class TestGuaranteedFit(unittest.TestCase):
         self.assertTrue(np.allclose(c, c_matlab))
 
     def test_multiple_same_ellipse(self):
-        '''Fit the same ellipse multiple times.'''
+        """Fit the same ellipse multiple times."""
 
         num_copies = 7
         x, y = data_points[:, 0], data_points[:, 1]
@@ -37,7 +37,7 @@ class TestGuaranteedFit(unittest.TestCase):
         y = np.tile(y, (num_copies, 1))
         c = fast_guaranteed_ellipse_estimate(x, y)
 
-        # coeffs from MATLAB script:
+        # coefficients from MATLAB script:
         c_matlab = np.array([
             3.96548501597781e-06,
             -5.01792302311930e-07,
@@ -50,7 +50,7 @@ class TestGuaranteedFit(unittest.TestCase):
         self.assertTrue(np.allclose(c, c_matlab))
 
     def test_multiple_ellipses_different_iters(self):
-        '''Test similar ellipses which take different iters.'''
+        """Test similar ellipses which take different iters."""
 
         num_copies = 7
         x, y = data_points[:, 0], data_points[:, 1]

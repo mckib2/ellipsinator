@@ -1,0 +1,26 @@
+[project]
+name = "ellipsinator"
+version = "0.3.0"
+description = "Ellipse tools for Python"
+readme = "README.rst"
+requires-python = ">=3.8"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Nicholas McKibben", email="nicholas.bgp@gmail.com"}
+]
+maintainers = [
+    {name = "Nicholas McKibben", email="nicholas.bgp@gmail.com"}
+]
+dependencies = [
+    "numpy>=1.26.1",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/mckib2/ellipsinator"
+
+[build-system]
+requires = ["build", "setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.distutils.bdist_wheel]
+universal = true

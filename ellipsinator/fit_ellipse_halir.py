@@ -1,12 +1,12 @@
-'''Python port of ellipse fitting algorithm due to Halir and Flusser.'''
+"""Python port of ellipse fitting algorithm due to Halir and Flusser."""
 
 import numpy as np
 
-from ._fit_ellipse_process_params import _fit_ellipse_process_params
+from ellipsinator._fit_ellipse_process_params import _fit_ellipse_process_params
 
 
-def fit_ellipse_halir(x, y=None):
-    '''Improved ellipse fitting algorithm by Halir and Flusser.
+def fit_ellipse_halir(x: np.ndarray, y: np.ndarray=None) -> np.ndarray:
+    """Improved ellipse fitting algorithm by Halir and Flusser.
 
     Parameters
     ----------
@@ -50,9 +50,8 @@ def fit_ellipse_halir(x, y=None):
     .. [1] A. W. Fitzgibbon, M. Pilu, R. B. Fisher "Direct Least
            Squares Fitting of Ellipses" IEEE Trans. PAMI, Vol. 21,
            pages 476-480 (1999)
-    .. [2] http://citeseerx.ist.psu.edu/viewdoc/
-           download?doi=10.1.1.1.7559&rep=rep1&type=pdf
-    '''
+    .. [2] http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.1.7559&rep=rep1&type=pdf
+    """
 
     # Put x in the correct form
     x, y, only_one = _fit_ellipse_process_params(x, y)

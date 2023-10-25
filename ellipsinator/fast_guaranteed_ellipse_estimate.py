@@ -1,24 +1,20 @@
-'''Python port of MATLAB implementation of available at [1]_.
+"""Python port of MATLAB implementation of available at [1]_.
 
 References
 ----------
-.. [1] https://github.com/zygmuntszpak/guaranteed-ellipse-fitting-
-       with-a-confidence-region-and-an-uncertainty-measure
-'''
+.. [1] https://github.com/zygmuntszpak/guaranteed-ellipse-fitting-with-a-confidence-region-and-an-uncertainty-measure
+"""
 
 import numpy as np
 
-from ._fit_ellipse_process_params import _fit_ellipse_process_params
-from ._fast_guaranteed_ellipse_funcs.compute_directellipse_estimate import (
-    compute_directellipse_estimates)
-from ._fast_guaranteed_ellipse_funcs.normalize_data_isotropically import (
-    normalize_data_isotropically)
-from ._fast_guaranteed_ellipse_funcs.fastGuaranteedEllipseFit import (
-    fastGuaranteedEllipseFit)
+from ellipsinator._fit_ellipse_process_params import _fit_ellipse_process_params
+from ellipsinator._fast_guaranteed_ellipse_funcs.compute_directellipse_estimate import compute_directellipse_estimates
+from ellipsinator._fast_guaranteed_ellipse_funcs.normalize_data_isotropically import normalize_data_isotropically
+from ellipsinator._fast_guaranteed_ellipse_funcs.fastGuaranteedEllipseFit import fastGuaranteedEllipseFit
 
 
-def fast_guaranteed_ellipse_estimate(x, y=None, cov=None, ret_iters=False):
-    '''Guaranteed Ellipse Fitting with a Confidence Region and an
+def fast_guaranteed_ellipse_estimate(x: np.ndarray, y: np.ndarray=None, cov: np.ndarray=None, ret_iters: bool=False):
+    """Guaranteed Ellipse Fitting with a Confidence Region and an
        Uncertainty Measure for Centre, Axes and Orientation
 
     This procedure takes as input a matrix of two-dimensional
@@ -82,7 +78,7 @@ def fast_guaranteed_ellipse_estimate(x, y=None, cov=None, ret_iters=False):
            ellipse fitting methods and implications for multiple view
            geometry", Digital Image Computing Techniques and Applications,
            Dec 2012, pp 1--8
-    '''
+    """
 
     x, y, only_one = _fit_ellipse_process_params(x, y)
     nPts = x.shape[1]
@@ -91,7 +87,7 @@ def fast_guaranteed_ellipse_estimate(x, y=None, cov=None, ret_iters=False):
     if cov is None:
         # Generate a list of diagonal covariance matrices
         class UnformDict:
-            '''Return val for every requested key.'''
+            """Return val for every requested key."""
             def __init__(self, val):
                 self.val = val
 
@@ -141,8 +137,8 @@ def fast_guaranteed_ellipse_estimate(x, y=None, cov=None, ret_iters=False):
     initialEllipseParametersNormalizedSpace /= np.linalg.norm(
         initialEllipseParametersNormalizedSpace, axis=-1, keepdims=True)
 
-    # Becase the data points are now in a new normalised coordinate system,
-    # the data covariance matrices also need to be tranformed into the
+    # Because the data points are now in a new normalised coordinate system,
+    # the data covariance matrices also need to be transformed into the
     # new normalised coordinate system. The transformation of the covariance
     # matrices into the new coordinate system can be achieved by embedding the
     # covariance matrices in a 3x3 matrix (by padding the 2x2 covariance
@@ -159,15 +155,15 @@ def fast_guaranteed_ellipse_estimate(x, y=None, cov=None, ret_iters=False):
         # coordinates of the data point in the normalised coordinate system
         normalised_Cov[iPts] = covX_i[:, 0:2, 0:2]
 
-    # To guarantee an ellipse we utilise a special parameterisation which
-    # by definition excludes the possiblity of a hyperbola. In theory
+    # To guarantee an ellipse we utilise a special parameterization which
+    # by definition excludes the possibility of a hyperbola. In theory
     # a parabola could be estimated, but this is very unlikely because
     # an equality constraint is difficult to satisfy when there is noisy data.
     # As an extra guard to ensure that a parabolic fit is not possible we
     # terminate our algorithm when the discriminant of the conic equation
     # approaches zero.
 
-    # convert our original parameterisation to one that excludes hyperbolas
+    # convert our original parameterization to one that excludes hyperbolas
     # NB, it is assumed that the initialParameters that were passed into the
     # function do not represent a hyperbola or parabola.
     para = initialEllipseParametersNormalizedSpace

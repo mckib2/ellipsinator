@@ -1,8 +1,9 @@
 
 import numpy as np
 
-def direct_ellipse_fit(data):
-    '''
+
+def direct_ellipse_fit(data: np.ndarray) -> np.ndarray:
+    """
     This code is an implementation of the following paper
 
     R. Halif and J. Flusser
@@ -10,7 +11,7 @@ def direct_ellipse_fit(data):
     Proc. 6th International Conference in Central Europe on Computer Graphics
     and Visualization. WSCG '98
     Czech Republic,125--132, feb, 1998
-    '''
+    """
     x = data[0, :]
     y = data[1, :]
 
@@ -25,9 +26,9 @@ def direct_ellipse_fit(data):
         M[2, :]/2,
         -1*M[1, :],
         M[0, :]/2,
-    ]) # premultiply by inv(C1)
+    ])  # premultiply by inv(C1)
     evalue, evec = np.linalg.eig(M)       # solve eigensystem
-    cond = 4*evec[0, :]*evec[2, :] - evec[1, :]**2 # evaluate a'Ca
+    cond = 4*evec[0, :]*evec[2, :] - evec[1, :]**2  # evaluate a'Ca
     al = evec[:, cond > 0]   # eigenvector for min. pos. eigenvalue
     a = np.concatenate((al, T @ al))              # ellipse coefficients
     a /= np.linalg.norm(a)

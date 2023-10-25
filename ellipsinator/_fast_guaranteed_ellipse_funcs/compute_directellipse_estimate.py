@@ -1,13 +1,12 @@
 
 import numpy as np
 
-# from .direct_ellipse_fit import direct_ellipse_fit
 from ellipsinator import fit_ellipse_halir
-from .normalize_data_isotropically import normalize_data_isotropically
+from ellipsinator._fast_guaranteed_ellipse_funcs.normalize_data_isotropically import normalize_data_isotropically
 
 
-def compute_directellipse_estimates(x, y):
-    '''
+def compute_directellipse_estimates(x: np.ndarray, y: np.ndarray) -> np.ndarray:
+    """
     Parameters
     ----------
     x, y : array_like (N,)
@@ -26,7 +25,7 @@ def compute_directellipse_estimates(x, y):
     Notes
     -----
     This function is a wrapper for the numerically stable direct ellipse
-    fit due to [1]_ which is a modificaiton of [2]_.
+    fit due to [1]_ which is a modification of [2]_.
 
     It first shifts all the data points to a new
     coordinate system so that the origin of the coordinate system is at the
@@ -46,7 +45,7 @@ def compute_directellipse_estimates(x, y):
            Republic,125--132, feb, 1998
     .. [2] A. W. Fitzgibbon, M. Pilu, R. B. Fisher "Direct Least Squares
            Fitting of Ellipses" IEEE Trans. PAMI, Vol. 21, pages 476-480 (1999)
-    '''
+    """
 
     assert x.shape == y.shape, 'x, y must have the same shape!'
 
@@ -70,7 +69,7 @@ def compute_directellipse_estimates(x, y):
         np.concatenate((d[:, None]/2, e[:, None]/2, f[:, None]), axis=1)[:, None, :],
     ), axis=1)
 
-    # denormalise C
+    # denormalize C
     C = np.einsum('fji,fjk,fkl->fil', T, C, T)
     # C = T.T @ C @ T
     aa = C[:, 0, 0]

@@ -1,10 +1,12 @@
-'''Normalize coordinates so that they lie inside a unit box.'''
+"""Normalize coordinates so that they lie inside a unit box."""
+
+from typing import Tuple
 
 import numpy as np
 
 
-def normalize_data_isotropically(x, y):
-    '''Normalzie data isotropically.
+def normalize_data_isotropically(x: np.ndarray, y: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Normalize data isotropically.
 
     This procedure takes as input a matrix of two-dimensional
     coordinates and normalizes the coordinates so that they
@@ -38,7 +40,7 @@ def normalize_data_isotropically(x, y):
     .. [1] W. Chojnacki and M. Brookes, "On the Consistency of the
            Normalized Eight-Point Algorithm", J Math Imaging Vis (2007)
            28: 19-27
-    '''
+    """
 
     assert x.shape == y.shape, 'x, y must be the same shape!'
     nEllipses, nPoints = x.shape[:]
@@ -68,4 +70,4 @@ def normalize_data_isotropically(x, y):
     ), axis=1)
 
     normalizedPts = np.einsum('fij,jfk->fik', T, points)
-    return(normalizedPts[:, 0, :], normalizedPts[:, 1, :], T)
+    return normalizedPts[:, 0, :], normalizedPts[:, 1, :], T

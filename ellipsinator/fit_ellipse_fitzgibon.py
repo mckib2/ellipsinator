@@ -1,12 +1,12 @@
-'''Ellipse fitting algorithm due to Fitzgibon et. al.'''
+"""Ellipse fitting algorithm due to Fitzgibon et al."""
 
 import numpy as np
 
-from ._fit_ellipse_process_params import _fit_ellipse_process_params
+from ellipsinator._fit_ellipse_process_params import _fit_ellipse_process_params
 
 
-def fit_ellipse_fitzgibon(x, y=None):
-    '''Python port of direct ellipse fitting algorithm by Fitzgibon et. al.
+def fit_ellipse_fitzgibon(x: np.ndarray, y: np.ndarray=None):
+    """Python port of direct ellipse fitting algorithm by Fitzgibon et al.
 
     Parameters
     ----------
@@ -27,8 +27,7 @@ def fit_ellipse_fitzgibon(x, y=None):
     Notes
     -----
     See Figure 1 from [1]_.
-    Also see previous python port:
-    http://nicky.vanforeest.com/misc/fitEllipse/fitEllipse.html
+    Also see previous python port: ttp://nicky.vanforeest.com/misc/fitEllipse/fitEllipse.html
 
     References
     ----------
@@ -36,7 +35,7 @@ def fit_ellipse_fitzgibon(x, y=None):
            squares fitting of ellipses." Proc. 6th International Conference in
            Central Europe on Computer Graphics and Visualization. WSCG. Vol.
            98. 1998.
-    '''
+    """
 
     # Process the parameters
     x, y, only_one = _fit_ellipse_process_params(x, y)
